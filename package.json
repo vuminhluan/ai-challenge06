@@ -1,0 +1,17 @@
+{
+  "name": "policy-benefits-calculator",
+  "version": "1.0.0",
+  "description": "Calculates how much of each medical expense an insurance policy covers, with explanations",
+  "type": "module",
+  "main": "src/index.js",
+  "exports": "./src/index.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js",
+    "test:report": "node --test --test-reporter=spec test/*.test.js > test-results.txt",
+    "calculate": "node cli.js data/policy.json data/expenses.json output/results.json"
+  },
+  "license": "MIT"
+}
