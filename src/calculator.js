@@ -2,6 +2,7 @@ import { toSatang, toBaht, percentOf, formatAmount } from './money.js';
 import { validatePolicy, validateExpenses, resolveCoverage } from './policy.js';
 import { createLedger } from './ledger.js';
 import { checkEligibility } from './eligibility.js';
+import { buildSummary } from './summary.js';
 
 // Chronological order; same-day expenses by ID so results never depend on input order.
 export function compareExpenses(a, b) {
@@ -110,5 +111,5 @@ export function calculate(policy, expenses) {
   validateExpenses(expenses);
   const ledger = createLedger(policy);
   const results = [...expenses].sort(compareExpenses).map((expense) => processExpense(policy, expense, ledger));
-  return { results };
+  return { results, summary: buildSummary(policy, ledger, results) };
 }
