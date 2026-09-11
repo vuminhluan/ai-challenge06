@@ -1,0 +1,2751 @@
+ ▐▛███▛█   Claude Code v2.1.269
+▝▜██████▀  Opus 5 · Claude Max
+  ▝▝ ▝▝    ~/Documents/MyProjects/ai-challenge-06
+
+  Fable 5.1 writes better code and reports progress on long tasks. Switch anytime with /model.
+
+❯ @AI_Engineering_Challenges/AI_Challenge_06.md .                               
+                                                                                
+  Giúp phân tích bài toán này. Đầu tiên cho tôi hỏi có phải đề bài yêu cầu xây  
+  dựng 1 hệ thống giúp tính toán chi phí mà bảo hiểm sẽ chi trả khi 1 thành     
+  viên gửi 1 medical expense không?                                             
+  ⎿  Read AI_Engineering_Challenges/AI_Challenge_06.md (78 lines)
+
+⏺ Đúng về cơ bản, nhưng có vài điểm cần hiểu chính xác hơn vì chúng ảnh hưởng
+  đến thiết kế:
+
+  Hiểu đúng đề bài
+
+  1. Đề yêu cầu một "calculator" (module/function tái sử dụng), không phải một 
+  "hệ thống".
+  Không cần UI, database, API hay luồng nộp claim. Cốt lõi là một hàm thuần:
+
+  calculate(policy, expenses) → { results theo từng expense, summary số dư còn
+  lại }
+
+  Đề nói rõ nó phải là module tái sử dụng, không được là script hardcode dữ
+  liệu.
+
+  2. Xử lý theo lô và có trạng thái, không tính từng expense độc lập.
+  Đây là điểm quan trọng nhất. Input là danh sách expense, phải sắp theo ngày
+  rồi xử lý lần lượt. Expense trước tiêu hao hạn mức (annual limit, số lượt
+  khám, deductible) nên kết quả của expense sau phụ thuộc vào expense trước.
+  Cùng một expense có thể được chi trả đủ nếu nộp đầu năm và bị từ chối nếu nộp
+  cuối năm.
+
+  3. Output không chỉ là số tiền, mà là một quyết định kèm lý do.
+  Mỗi expense trả về:
+  - Số tiền: covered_amount, copay_amount, member_pays
+  - Quyết định: COVERED / PARTIALLY_COVERED / DENIED
+  - Lý do dễ đọc cho người thường (ví dụ "Bị từ chối: còn trong thời gian chờ 90
+    ngày cho Maternity")
+  - Hạn mức còn lại sau expense đó
+
+  Các quy tắc phải xử lý
+
+  ┌───────────────────┬─────────────────────────────────────────────────────┐
+  │      Quy tắc      │                       Ý nghĩa                       │
+  ├───────────────────┼─────────────────────────────────────────────────────┤
+  │ Annual limit      │ Tổng tiền tối đa bảo hiểm trả trong năm             │
+  ├───────────────────┼─────────────────────────────────────────────────────┤
+  │ Per-visit         │ Trần tiền mỗi lần khám, và/hoặc số lượt khám tối    │
+  │ sub-limit         │ đa/năm                                              │
+  ├───────────────────┼─────────────────────────────────────────────────────┤
+  │ Copay             │ Thành viên tự trả một phần, theo % hoặc số tiền cố  │
+  │                   │ định                                                │
+  ├───────────────────┼─────────────────────────────────────────────────────┤
+  │ Deductible        │ Khoản thành viên tự trả trước khi bảo hiểm bắt đầu  │
+  │                   │ chi                                                 │
+  ├───────────────────┼─────────────────────────────────────────────────────┤
+  │ Waiting period    │ Quyền lợi chỉ có hiệu lực sau N ngày kể từ ngày bắt │
+  │                   │  đầu hợp đồng                                       │
+  ├───────────────────┼─────────────────────────────────────────────────────┤
+  │ Exclusion         │ Một số chẩn đoán/dịch vụ không được chi trả         │
+  └───────────────────┴─────────────────────────────────────────────────────┘
+
+  Những chỗ đề bài để ngỏ, cần tự quyết định
+
+  1. Challenge 05 không có trong repo. Mình sẽ phải tự thiết kế cấu trúc policy
+     JSON.
+  2. Thứ tự áp dụng quy tắc không được quy định. Deductible, copay, sub-limit,
+     annual limit áp theo thứ tự nào sẽ ra số tiền khác nhau. Ví dụ: trừ
+     deductible trước rồi mới tính copay, hay ngược lại? Cần chọn một thứ tự và
+     ghi rõ lý do.
+  3. remaining_visit_limit: 29 trong ví dụ là số lượt, không phải số tiền. Như
+     vậy "per-visit sub-limit" có thể gồm cả trần tiền mỗi lần khám lẫn số lần
+     khám tối đa mỗi năm.
+  4. Expense không có ngày bắt đầu hợp đồng của thành viên, nên policy phải chứa
+     effective_date thì mới tính được waiting period.
+  5. "Overlapping benefits" (được nêu trong tiêu chí chấm) chưa được định nghĩa.
+     Có thể hiểu là sub-benefit vừa tiêu hao hạn mức riêng của nó vừa tiêu hao
+     annual limit chung, hoặc hai benefit dùng chung một quỹ.
+  6. Ví dụ output không xuất hiện deductible. Cần tự quyết định deductible tính
+     theo năm hay theo từng benefit.
+
+  Những thứ phải nộp
+
+  - Policy JSON và 20 expense được thiết kế có chủ đích để phủ đủ 6 kịch bản:
+    chi trả đủ, trừ copay, từ chối vì waiting period, từ chối vì exclusion, từ
+    chối vì hết hạn mức, chi trả một phần vì hạn mức còn lại ít hơn số tiền
+    expense
+  - Expected outputs và kết quả test
+  - Ít nhất 10 unit test
+  - Summary số dư còn lại theo từng benefit
+  - Ước lượng timeline (đề cho 2–4 tiếng)
+  - Push toàn bộ lên GitHub
+
+  Bước tiếp theo, bạn muốn đi vào thiết kế cấu trúc policy JSON và chốt thứ tự
+  áp dụng quy tắc (điểm 2 và 5 ở trên), hay chọn ngôn ngữ/stack trước?
+
+❯ Ok, tôi nghĩ cần thiết kế policy trước.                                       
+                                                                                
+  - Về thứ tự áp dụng: Tôi nghĩ sẽ phải có thứ tự, đầu tiên là Deductible rồi   
+  mới Copay.                                                                    
+  - Expense cần có effective_date                                               
+  - Về Overlapping benefits, hãy giải thích kĩ hơn bằng tình huống trong thực   
+  tế.                                                                           
+  - Làm rõ vấn đề này: deductible tính theo năm hay theo từng benefit, cho ví   
+  dụ mỗi cái để tôi dễ quyết định                                               
+
+⏺ Mình trả lời lần lượt 4 ý. Có 2 chỗ mình đề xuất khác với ý của bạn (ý 1 và ý
+  2), kèm lý do.
+
+  1. Thứ tự áp dụng: đồng ý Deductible trước Copay, nhưng cần chốt cả chuỗi
+
+  Deductible rồi mới Copay là đúng. Tuy vậy chuỗi còn các bước khác cũng cần có
+  vị trí. Mình đề xuất:
+
+  1. Kiểm tra điều kiện → không đạt thì DENIED, dừng luôn
+     (benefit có trong policy? exclusion? waiting period? còn lượt khám?)
+  2. Per-visit cap   → eligible = min(amount, trần mỗi lần khám)
+  3. Deductible      → trừ phần deductible còn lại
+  4. Copay           → % hoặc số tiền cố định, tính trên phần còn lại
+  5. Limit caps      → covered = min(kết quả bước 4, hạn mức còn lại của
+  sub-benefit, benefit, annual)
+
+  Chỗ cần lưu ý là per-visit cap phải đứng trước deductible. Ví dụ: khám 5,000,
+  trần 3,000/lần, deductible 1,000, copay 20%:
+
+  ┌───────────┬─────────────────────┬────────────────────┐
+  │           │ Cap trước (đề xuất) │  Deductible trước  │
+  ├───────────┼─────────────────────┼────────────────────┤
+  │ Bước A    │ Cap → 3,000         │ Deductible → 4,000 │
+  ├───────────┼─────────────────────┼────────────────────┤
+  │ Bước B    │ Deductible → 2,000  │ Cap → 3,000        │
+  ├───────────┼─────────────────────┼────────────────────┤
+  │ Copay 20% │ 400                 │ 600                │
+  ├───────────┼─────────────────────┼────────────────────┤
+  │ Covered   │ 1,600               │ 2,400              │
+  └───────────┴─────────────────────┴────────────────────┘
+
+  Nếu trừ deductible trước, 1,000 deductible bị trừ vào phần tiền vượt trần, tức
+  phần mà bảo hiểm vốn không bao giờ trả. Kết quả là thành viên gần như được
+  miễn deductible. Deductible chỉ nên tính trên phần chi phí hợp lệ.
+
+  Hệ quả cho output: khi có deductible hoặc vượt trần thì member_pays sẽ khác
+  copay_amount. Mình đề xuất thêm hai field deductible_applied và
+  not_covered_amount, để luôn thỏa hai đẳng thức:
+  - submitted = covered + member_pays
+  - member_pays = deductible + copay + not_covered
+
+  Như vậy mỗi lý do đều đối chiếu được bằng con số.
+
+  2. effective_date: nên đặt trong policy, không đặt trong expense
+
+  effective_date là ngày hợp đồng bắt đầu có hiệu lực, tức là thuộc tính của hợp
+  đồng, không phải của từng lần khám. Expense đã có date (ngày khám), nên
+  waiting period tính bằng expense.date − policy.effective_date.
+
+  Nếu đặt trong expense, cùng một giá trị sẽ bị lặp 20 lần và có thể mâu thuẫn
+  nhau: EXP-001 ghi ngày 01/01, EXP-002 ghi ngày 01/02 thì biết tin cái nào? Đặt
+  trong policy thì chỉ có một nguồn duy nhất.
+
+  Nhân tiện, policy nên có luôn expiry_date. Expense trước ngày hiệu lực hoặc
+  sau ngày hết hạn sẽ bị DENIED, và đây cũng là một edge case tốt để test.
+
+  ▎ Nếu bạn đang nghĩ tới nhiều thành viên dùng chung một policy, mỗi người tham
+  ▎ gia một ngày khác nhau, thì cách đúng là thêm member_id vào expense và đặt 
+  ▎ effective_date trong danh sách member. Đề chỉ có một người, nên mình đề xuất
+  ▎ giữ đơn giản.
+
+  3. Overlapping benefits: ba tình huống thực tế
+
+  a. Hạn mức lồng nhau (phổ biến nhất, gần như bắt buộc phải làm)
+
+  Policy có annual limit 100,000. Trong đó Outpatient giới hạn 30,000/năm. Bên
+  trong Outpatient, Physiotherapy giới hạn 10,000/năm, còn Doctor Visit giới hạn
+  1,500/lần và 30 lần/năm.
+
+  Chị A đi vật lý trị liệu và khám bệnh nhiều. Đến tháng 9, tổng Outpatient đã
+  chạm 30,000. Tháng 10 chị đi khám bác sĩ: Doctor Visit vẫn còn 12 lượt, nhưng
+  Outpatient đã hết nên expense bị DENIED. Lý do phải ghi rõ là "hết hạn mức 
+  Outpatient", không phải "hết lượt khám".
+
+  Như vậy một expense tiêu hao đồng thời 3 tầng (sub-benefit → benefit →
+  policy), và covered bằng giá trị nhỏ nhất trong cả ba.
+
+  b. Nhiều benefit dùng chung một quỹ
+
+  Ví dụ Dental và Optical dùng chung 15,000/năm. Làm răng hết 12,000, sau đó cắt
+  kính 5,000 thì chỉ được trả 3,000 (PARTIALLY_COVERED). Về cấu trúc, trường
+  hợp này chỉ là dạng (a) mà tầng cha không trùng với benefit type. Nếu schema
+  hỗ trợ "limit group" thì làm được mà không tốn thêm nhiều công.
+
+  c. Một lần khám rơi vào nhiều benefit
+
+  Anh B khám bác sĩ và chụp MRI trong cùng một lần: hóa đơn được tách thành
+  Doctor Visit và Diagnostic Imaging. Vì trong đề expense đã ghi sẵn
+  benefit_type, việc phân loại coi như đã được làm trước. Câu hỏi còn lại là 2 
+  expense cùng ngày, cùng provider thì tính là 1 lượt khám hay 2? Câu trả lời
+  ảnh hưởng đến cả visit limit lẫn per-visit cap.
+
+  Đề xuất: làm (a), làm (b) nếu schema cho phép. Với (c), đơn giản nhất là coi
+  mỗi expense là 1 lượt khám và ghi rõ đây là giả định.
+
+  4. Deductible theo năm hay theo benefit
+
+  Hai phương án được so sánh trên cùng 3 expense, copay 20%, không có per-visit
+  cap:
+
+  Phương án A: một deductible 3,000/năm, dùng chung cho mọi benefit
+
+  ┌───────────────┬─────────────┬───────┬─────────┬──────────┬──────────────┐
+  │    Expense    │ Deductible  │ Copay │ Covered │ Member   │ Deductible   │
+  │               │     áp      │       │         │   trả    │     còn      │
+  ├───────────────┼─────────────┼───────┼─────────┼──────────┼──────────────┤
+  │ T1 · Khám     │ 2,000       │ 0     │ 0       │ 2,000    │ 1,000        │
+  │ bệnh 2,000    │             │       │         │          │              │
+  ├───────────────┼─────────────┼───────┼─────────┼──────────┼──────────────┤
+  │ T2 · Nha khoa │ 1,000       │ 300   │ 1,200   │ 1,300    │ 0            │
+  │  2,500        │             │       │         │          │              │
+  ├───────────────┼─────────────┼───────┼─────────┼──────────┼──────────────┤
+  │ T3 · Khám     │ 0           │ 300   │ 1,200   │ 300      │ 0            │
+  │ bệnh 1,500    │             │       │         │          │              │
+  ├───────────────┼─────────────┼───────┼─────────┼──────────┼──────────────┤
+  │ Tổng          │             │       │ 2,400   │ 3,600    │              │
+  └───────────────┴─────────────┴───────┴─────────┴──────────┴──────────────┘
+
+  Phương án B: deductible riêng theo từng benefit (Outpatient 1,000, Dental 
+  1,500)
+
+  ┌──────────────┬─────────────┬───────┬─────────┬─────────┬───────────────┐
+  │   Expense    │ Deductible  │ Copay │ Covered │ Member  │  Deductible   │
+  │              │     áp      │       │         │   trả   │      còn      │
+  ├──────────────┼─────────────┼───────┼─────────┼─────────┼───────────────┤
+  │ T1 · Khám    │ 1,000 (OPD) │ 200   │ 800     │ 1,200   │ OPD 0 ·       │
+  │ bệnh 2,000   │             │       │         │         │ Dental 1,500  │
+  ├──────────────┼─────────────┼───────┼─────────┼─────────┼───────────────┤
+  │ T2 · Nha     │ 1,500       │ 200   │ 800     │ 1,700   │ OPD 0 ·       │
+  │ khoa 2,500   │ (Dental)    │       │         │         │ Dental 0      │
+  ├──────────────┼─────────────┼───────┼─────────┼─────────┼───────────────┤
+  │ T3 · Khám    │ 0           │ 300   │ 1,200   │ 300     │ OPD 0 ·       │
+  │ bệnh 1,500   │             │       │         │         │ Dental 0      │
+  ├──────────────┼─────────────┼───────┼─────────┼─────────┼───────────────┤
+  │ Tổng         │             │       │ 2,800   │ 3,200   │               │
+  └──────────────┴─────────────┴───────┴─────────┴─────────┴───────────────┘
+
+  Khác biệt cốt lõi: ở phương án A, tiền khám bệnh tháng 1 giúp lần làm răng
+  tháng 2 được trả nhiều hơn, vì cả hai đổ vào chung một quỹ. Ở phương án B, trả
+  xong deductible Outpatient không giúp gì cho Dental.
+
+  ┌─────────────┬─────────────────────────────────────────┬─────────────────┐
+  │             │        A: theo năm, toàn policy         │  B: theo từng   │
+  │             │                                         │     benefit     │
+  ├─────────────┼─────────────────────────────────────────┼─────────────────┤
+  │ Trạng thái  │                                         │ 1 bộ đếm cho    │
+  │ cần theo    │ 1 bộ đếm                                │ mỗi benefit     │
+  │ dõi         │                                         │                 │
+  ├─────────────┼─────────────────────────────────────────┼─────────────────┤
+  │             │                                         │ Mỗi loại chi    │
+  │ Ưu điểm     │ Đơn giản, thành viên dễ hiểu            │ phí có mức phù  │
+  │             │                                         │ hợp             │
+  ├─────────────┼─────────────────────────────────────────┼─────────────────┤
+  │             │ Deductible 3,000 sẽ "nuốt" hầu hết lần  │ Phức tạp hơn    │
+  │ Nhược điểm  │ khám ngoại trú nhỏ, trong khi lại không │ một chút        │
+  │             │  đáng kể với nội trú                    │                 │
+  └─────────────┴─────────────────────────────────────────┴─────────────────┘
+
+  Mình nghiêng về B, vì chi phí Inpatient và Outpatient chênh nhau rất xa nên
+  một mức chung khó hợp lý cho cả hai. B cũng khớp tự nhiên với cấu trúc lồng
+  nhau ở ý 3: deductible nằm cạnh các limit của từng benefit, và benefit nào
+  không cần thì đặt bằng 0.
+
+  Một câu hỏi phát sinh: expense T1 ở phương án A có covered = 0 vì toàn bộ số
+  tiền rơi vào deductible. Đây không phải từ chối, vì expense hợp lệ và vẫn làm
+  giảm deductible, nhưng gọi là "PARTIALLY_COVERED" thì cũng không đúng. Mình đề
+  xuất thêm decision APPLIED_TO_DEDUCTIBLE.
+
+  Cần bạn chốt để mình phác thảo policy JSON
+
+  1. Chuỗi 5 bước ở trên, với cap đứng trước deductible: OK không?
+  2. Đặt effective_date và expiry_date trong policy: OK không?
+  3. Overlapping: làm (a) và (b)? Mỗi expense tính là 1 lượt khám?
+  4. Deductible theo phương án A hay B?
+  5. Có thêm decision APPLIED_TO_DEDUCTIBLE không?
+
+❯ 1. Kiểm tra điều kiện → không đạt thì DENIED, dừng luôn                       
+     (benefit có trong policy? exclusion? waiting period? còn lượt khám?)       
+  2. Per-visit cap   → eligible = min(amount, trần mỗi lần khám)                
+  3. Deductible      → trừ phần deductible còn lại                              
+  4. Copay           → % hoặc số tiền cố định, tính trên phần còn lại           
+  5. Limit caps      → covered = min(kết quả bước 4, hạn mức còn lại của        
+  sub-benefit, benefit, annual)                                                 
+                                                                                
+  Giải thích rõ hơn về "Per-visit cap   → eligible = min(amount, trần mỗi lần   
+  khám)". Nó là gì vậy?                                                         
+
+⏺ Per-visit cap là số tiền tối đa bảo hiểm chấp nhận cho một lần khám, bất kể
+  hóa đơn thực tế lớn đến đâu. Phần vượt quá mức này thành viên phải tự trả hết,
+  và nó bị loại ra ngay từ đầu, trước khi tính deductible hay copay.
+
+  Ví dụ thực tế
+
+  Policy quy định: Doctor Visit tối đa 1,500 THB/lần.
+
+  ┌─────────────────────────┬───────┬───────────────────┬──────────────────┐
+  │                         │ Hóa   │    Eligible =     │ Phần vượt trần   │
+  │       Tình huống        │  đơn  │   min(hóa đơn,    │ (member tự trả)  │
+  │                         │       │      1,500)       │                  │
+  ├─────────────────────────┼───────┼───────────────────┼──────────────────┤
+  │ Khám ở phòng khám nhỏ   │ 800   │ 800               │ 0                │
+  ├─────────────────────────┼───────┼───────────────────┼──────────────────┤
+  │ Khám ở bệnh viện tầm    │ 1,500 │ 1,500             │ 0                │
+  │ trung                   │       │                   │                  │
+  ├─────────────────────────┼───────┼───────────────────┼──────────────────┤
+  │ Khám ở Bangkok Hospital │ 2,500 │ 1,500             │ 1,000            │
+  │  (bệnh viện tư cao cấp) │       │                   │                  │
+  └─────────────────────────┴───────┴───────────────────┴──────────────────┘
+
+  "Eligible" là phần chi phí mà bảo hiểm công nhận là thuộc phạm vi chi trả. Các
+  bước sau (deductible, copay, limit) chỉ làm việc trên con số này.
+
+  Vì sao bảo hiểm đặt trần mỗi lần khám? Cùng một bệnh viêm phế quản, khám ở
+  phòng khám mất 800 nhưng ở bệnh viện tư cao cấp có thể mất 2,500. Nhà bảo hiểm
+  muốn chi một mức hợp lý cho mỗi lần khám, còn nếu thành viên chọn nơi đắt hơn
+  thì tự trả phần chênh lệch. Nếu không có trần, một thành viên có thể tiêu hết
+  hạn mức năm chỉ sau vài lần khám ở bệnh viện đắt.
+
+  Chạy đủ 5 bước với hóa đơn 2,500
+
+  Giả sử policy quy định: trần Doctor Visit 1,500/lần, deductible Outpatient còn
+  500, copay 20%.
+
+  ┌─────────────────┬───────────────────────────────┬───────────────────────┐
+  │      Bước       │           Tính toán           │        Kết quả        │
+  ├─────────────────┼───────────────────────────────┼───────────────────────┤
+  │ 1. Kiểm tra     │ Không bị exclusion, qua       │ Hợp lệ                │
+  │ điều kiện       │ waiting period, còn lượt khám │                       │
+  ├─────────────────┼───────────────────────────────┼───────────────────────┤
+  │ 2. Per-visit    │ min(2,500, 1,500)             │ Eligible = 1,500 ·    │
+  │ cap             │                               │ vượt trần 1,000       │
+  ├─────────────────┼───────────────────────────────┼───────────────────────┤
+  │ 3. Deductible   │ 1,500 − 500                   │ 1,000 · deductible    │
+  │                 │                               │ 500                   │
+  ├─────────────────┼───────────────────────────────┼───────────────────────┤
+  │ 4. Copay 20%    │ 1,000 × 20%                   │ Copay 200 → còn 800   │
+  ├─────────────────┼───────────────────────────────┼───────────────────────┤
+  │ 5. Limit caps   │ Hạn mức còn đủ                │ Covered = 800         │
+  └─────────────────┴───────────────────────────────┴───────────────────────┘
+
+  Member trả: 1,000 (vượt trần) + 500 (deductible) + 200 (copay) = 1,700. Kiểm
+  tra: 800 + 1,700 = 2,500 ✓
+
+  Đừng nhầm với hai loại "limit" khác
+
+  Đề bài dùng chữ "sub-limit" khá mơ hồ. Thực tế có 3 thứ khác nhau:
+
+  ┌────────────────────────┬───────────────┬────────────────┬──────────────┐
+  │                        │               │ Có phụ thuộc   │              │
+  │          Loại          │     Ví dụ     │ expense trước  │  Nằm ở bước  │
+  │                        │               │     không?     │              │
+  ├────────────────────────┼───────────────┼────────────────┼──────────────┤
+  │ Per-visit cap (trần    │               │ Không. Lần nào │              │
+  │ tiền mỗi lần)          │ 1,500 THB/lần │  cũng áp như   │ Bước 2       │
+  │                        │               │ nhau           │              │
+  ├────────────────────────┼───────────────┼────────────────┼──────────────┤
+  │ Visit count limit (số  │               │ Có. Mỗi lần    │ Bước 1: hết  │
+  │ lượt mỗi năm)          │ 30 lần/năm    │ khám trừ 1     │ lượt thì     │
+  │                        │               │ lượt           │ DENIED       │
+  ├────────────────────────┼───────────────┼────────────────┼──────────────┤
+  │ Annual sub-limit (tổng │ Outpatient    │ Có. Mỗi lần    │              │
+  │  tiền mỗi năm của một  │ 30,000/năm    │ khám trừ tiền  │ Bước 5       │
+  │ benefit)               │               │                │              │
+  └────────────────────────┴───────────────┴────────────────┴──────────────┘
+
+  Điểm quan trọng: per-visit cap không có trạng thái. Lần khám thứ 1 hay thứ 29
+  cũng đều bị cắt ở 1,500. Ngược lại, hai loại còn lại cạn dần theo thời gian.
+  Đây là lý do cap được đặt ở bước 2 (một phép tính đơn thuần trên từng
+  expense), còn các limit có trạng thái được đặt ở bước 1 và bước 5.
+
+  Trường remaining_visit_limit: 29 trong output mẫu của đề chính là visit count 
+  limit, không phải per-visit cap.
+
+  Hai điểm cần thống nhất khi cài đặt
+
+  1. Phần vượt trần không tiêu hao gì cả. Nó không trừ vào deductible, không trừ
+     vào annual limit, chỉ ghi vào not_covered_amount kèm lý do "Vượt trần 
+     1,500 THB/lần khám cho Doctor Visit".
+  2. Không phải benefit nào cũng có per-visit cap. Ví dụ Inpatient thường tính
+     theo tổng đợt nằm viện, hoặc có trần theo ngày (room & board 4,000/ngày).
+     Trong schema, trường cap nên là tùy chọn: không khai báo nghĩa là không có
+     trần.
+
+  Giờ bạn đã chốt được chuỗi 5 bước chưa? Nếu rồi thì mình còn cần bạn chốt câu
+  2–5 từ lần trước (vị trí effective_date, phạm vi overlapping, deductible A hay
+  B, decision APPLIED_TO_DEDUCTIBLE) để phác thảo policy JSON.
+
+❯ Chốt:                                                                         
+                                                                                
+  1. Đồng ý với chuỗi 5 bước.                                                   
+  2. Đặt effective_date và expiry_date trong policy                             
+  3. Overlapping: làm (a) và (b). Mỗi expense tính là 1 lượt khám.              
+  4. Deductible theo từng benefit                                               
+  5. Nếu Deductible theo từng benefit thì sẽ không có trường hợp                
+  APPLIED_TO_DEDUCTIBLE đúng không?                                             
+
+⏺ Câu 5: Vẫn có trường hợp APPLIED_TO_DEDUCTIBLE
+
+  Deductible theo từng benefit không loại bỏ được trường hợp này. Nó xảy ra bất
+  cứ khi nào số tiền eligible ≤ deductible còn lại của benefit đó.
+
+  Ví dụ: Outpatient có deductible 1,000/năm, copay 20%.
+
+  ┌────────┬─────────┬───────────┬──────┬────────┬──────────────────────┐
+  │ Expens │ Eligibl │ Deductibl │ Copa │ Covere │       Decision       │
+  │   e    │    e    │   e áp    │  y   │   d    │                      │
+  ├────────┼─────────┼───────────┼──────┼────────┼──────────────────────┤
+  │ T1 ·   │         │           │      │        │                      │
+  │ Khám   │ 800     │ 800 (còn  │ 0    │ 0      │ APPLIED_TO_DEDUCTIBL │
+  │ bệnh   │         │ 200)      │      │        │ E                    │
+  │ 800    │         │           │      │        │                      │
+  ├────────┼─────────┼───────────┼──────┼────────┼──────────────────────┤
+  │ T2 ·   │         │           │      │        │                      │
+  │ Khám   │ 1,500   │ 200 (còn  │ 260  │ 1,040  │ PARTIALLY_COVERED    │
+  │ bệnh   │         │ 0)        │      │        │                      │
+  │ 1,500  │         │           │      │        │                      │
+  └────────┴─────────┴───────────┴──────┴────────┴──────────────────────┘
+
+  T1 là expense hợp lệ, được tính 1 lượt khám và làm giảm deductible, nhưng bảo
+  hiểm trả 0. Nếu gắn nhãn DENIED sẽ gây hiểu lầm. Trường hợp này chỉ biến mất
+  khi deductible của benefit bằng 0. Vì vậy mình đề xuất giữ lại, với 4 decision
+  được định nghĩa như sau:
+
+  ┌───────────────────────┬──────────────────────────────────────────────────┐
+  │       Decision        │                    Điều kiện                     │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ DENIED                │ Không qua bước 1, hoặc hạn mức còn lại bằng 0 ở  │
+  │                       │ bước 5                                           │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ APPLIED_TO_DEDUCTIBLE │ Covered = 0 vì toàn bộ eligible rơi vào          │
+  │                       │ deductible                                       │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ PARTIALLY_COVERED     │ 0 < covered < submitted                          │
+  ├───────────────────────┼──────────────────────────────────────────────────┤
+  │ COVERED               │ Covered = submitted                              │
+  └───────────────────────┴──────────────────────────────────────────────────┘
+
+  Theo output mẫu của đề, chỉ cần có copay là đã thành PARTIALLY_COVERED. Vì vậy
+  policy cần ít nhất một benefit không có copay và không có deductible thì mới
+  sinh ra được trường hợp COVERED.
+
+  Bản nháp policy JSON
+
+  {
+    "policy_id": "POL-2024-001",
+    "member_name": "Somchai Jaidee",
+    "currency": "THB",
+    "effective_date": "2024-01-01",
+    "expiry_date": "2024-12-31",
+    "annual_limit": 100000,
+
+    "limit_groups": [
+      { "group_id": "DENTAL_OPTICAL", "name": "Dental & Optical combined",
+  "annual_limit": 12000 }
+    ],
+
+    "benefits": [
+      {
+        "benefit_type": "OUTPATIENT",
+        "annual_limit": 20000,
+        "deductible": 1000,
+        "copay": { "type": "PERCENTAGE", "value": 20 },
+        "waiting_period_days": 30,
+        "sub_benefits": [
+          { "name": "Doctor Visit",  "per_visit_cap": 1500, "max_visits": 30 },
+          { "name": "Physiotherapy", "per_visit_cap": 1500, "max_visits": 10,
+  "annual_limit": 6000 },
+          { "name": "Lab Test",      "per_visit_cap": 3000 }
+        ]
+      },
+      {
+        "benefit_type": "INPATIENT",
+        "annual_limit": 70000,
+        "deductible": 0,
+        "copay": { "type": "PERCENTAGE", "value": 0 },
+        "waiting_period_days": 30,
+        "sub_benefits": [
+          { "name": "Hospital Stay", "per_visit_cap": 30000 },
+          { "name": "Surgery",       "per_visit_cap": 50000 }
+        ]
+      },
+      {
+        "benefit_type": "DENTAL",
+        "limit_group": "DENTAL_OPTICAL",
+        "annual_limit": 10000,
+        "deductible": 500,
+        "copay": { "type": "FIXED", "value": 300 },
+        "waiting_period_days": 90,
+        "sub_benefits": [
+          { "name": "Cleaning",   "max_visits": 2 },
+          { "name": "Filling",    "per_visit_cap": 3000 },
+          { "name": "Root Canal", "per_visit_cap": 8000, "waiting_period_days":
+  180 }
+        ]
+      },
+      {
+        "benefit_type": "OPTICAL",
+        "limit_group": "DENTAL_OPTICAL",
+        "annual_limit": 8000,
+        "deductible": 0,
+        "copay": { "type": "PERCENTAGE", "value": 10 },
+        "waiting_period_days": 60,
+        "sub_benefits": [
+          { "name": "Eye Exam", "max_visits": 1 },
+          { "name": "Glasses",  "per_visit_cap": 5000, "max_visits": 1 }
+        ]
+      }
+    ],
+
+    "exclusions": [
+      { "exclusion_id": "EXC-01", "description": "Cosmetic procedures",
+  "keywords": ["cosmetic", "whitening", "botox", "aesthetic"] },
+      { "exclusion_id": "EXC-02", "description": "Self-inflicted injury",
+  "keywords": ["self-inflicted"] },
+      { "exclusion_id": "EXC-03", "description": "Experimental treatment",
+  "keywords": ["experimental"] }
+    ]
+  }
+
+  Cách đọc cấu trúc
+
+  Hạn mức 4 tầng. Ở bước 5, covered bằng giá trị nhỏ nhất của hạn mức còn lại
+  qua tất cả các tầng:
+
+  sub_benefit.annual_limit  →  benefit.annual_limit  →  limit_group.annual_limit
+   →  policy.annual_limit
+     (Physio 6,000)             (Outpatient 20,000)       (Dental+Optical
+  12,000)       (100,000)
+
+  Các con số được cố ý đặt "chồng" lên nhau để overlapping thật sự xảy ra:
+  - Tổng hạn mức các benefit là 20k + 70k + 10k + 8k = 108k, vượt annual limit
+    100k. Nhờ vậy tầng policy có thể là tầng chặn, không chỉ để trang trí.
+  - Dental 10k cộng Optical 8k = 18k, vượt quỹ chung 12k. Đây là trường hợp (b).
+
+  Quy tắc kế thừa:
+
+  ┌─────────────────────┬─────────────┬────────────────────┬────────────────┐
+  │       Trường        │ Khai báo ở  │ Sub-benefit ghi đè │ Không khai báo │
+  │                     │             │        được?       │    nghĩa là    │
+  ├─────────────────────┼─────────────┼────────────────────┼────────────────┤
+  │ copay               │ benefit     │ Có                 │ Kế thừa từ     │
+  │                     │             │                    │ benefit        │
+  ├─────────────────────┼─────────────┼────────────────────┼────────────────┤
+  │ waiting_period_days │ benefit     │ Có (ví dụ Root     │ Kế thừa từ     │
+  │                     │             │ Canal 180 ngày)    │ benefit        │
+  ├─────────────────────┼─────────────┼────────────────────┼────────────────┤
+  │ deductible          │ benefit     │ Không (theo quyết  │ Bằng 0         │
+  │                     │             │ định câu 4)        │                │
+  ├─────────────────────┼─────────────┼────────────────────┼────────────────┤
+  │ per_visit_cap       │ sub-benefit │ —                  │ Không có trần  │
+  ├─────────────────────┼─────────────┼────────────────────┼────────────────┤
+  │ max_visits          │ sub-benefit │ —                  │ Không giới hạn │
+  │                     │             │                    │  lượt          │
+  ├─────────────────────┼─────────────┼────────────────────┼────────────────┤
+  │ annual_limit        │ cả hai      │ —                  │ Chỉ bị chặn    │
+  │                     │             │                    │ bởi tầng trên  │
+  ├─────────────────────┼─────────────┼────────────────────┼────────────────┤
+  │ limit_group         │ benefit     │ —                  │ Không thuộc    │
+  │                     │             │                    │ quỹ chung nào  │
+  └─────────────────────┴─────────────┴────────────────────┴────────────────┘
+
+  Mỗi benefit phục vụ các kịch bản test khác nhau:
+
+  ┌────────────┬─────────────────────────────────────────────────────────────┐
+  │  Benefit   │                          Kịch bản                           │
+  ├────────────┼─────────────────────────────────────────────────────────────┤
+  │ Outpatient │ Copay %, deductible, APPLIED_TO_DEDUCTIBLE, per-visit cap,  │
+  │            │ hết hạn mức sub-benefit (Physio)                            │
+  ├────────────┼─────────────────────────────────────────────────────────────┤
+  │ Inpatient  │ COVERED trọn vẹn, claim lớn làm cạn annual limit tổng       │
+  ├────────────┼─────────────────────────────────────────────────────────────┤
+  │ Dental     │ Copay cố định, waiting period ghi đè ở sub-benefit, hết     │
+  │            │ lượt khám (Cleaning), exclusion (whitening)                 │
+  ├────────────┼─────────────────────────────────────────────────────────────┤
+  │ Optical    │ Hết quỹ chung Dental+Optical                                │
+  └────────────┴─────────────────────────────────────────────────────────────┘
+
+  Các giả định cần ghi vào README
+
+  1. Lượt khám chỉ bị trừ khi decision khác DENIED. Lượt khám có decision
+     APPLIED_TO_DEDUCTIBLE vẫn bị trừ.
+  2. Exclusion được xác định bằng cách so khớp keyword (không phân biệt hoa
+     thường) trong trường diagnosis. Cách này đơn giản và minh bạch. Hệ thống
+     thật sẽ dùng mã ICD-10.
+  3. Waiting period được tính từ effective_date. Expense có ngày nằm ngoài
+     khoảng [effective_date, expiry_date] bị DENIED.
+  4. Không miễn waiting period cho tai nạn. Ngoài thực tế thường có ngoại lệ
+     này, nhưng mình để ngoài phạm vi.
+
+  Một edge case để chốt khi code: copay cố định có thể lớn hơn số tiền còn lại.
+  Ví dụ Dental cleaning 250 THB khi deductible đã trả xong: copay 300 nuốt hết,
+  covered = 0. Mình đề xuất xử lý như sau: copay = min(300, phần còn lại), và
+  gắn nhãn PARTIALLY_COVERED với lý do "Số tiền thấp hơn mức copay cố định".
+  Hoặc mình sẽ tránh trường hợp này khi thiết kế data. Bạn chọn hướng nào?
+
+  Mình sẽ tinh chỉnh các con số khi thiết kế 20 expense, để mỗi kịch bản được
+  kích hoạt đúng thời điểm. Bước tiếp theo bạn muốn thiết kế 20 expense, hay
+  chọn ngôn ngữ/stack trước?
+
+❯ Giải thích thêm về exclusions.                                                
+  "Không miễn waiting period cho tai nạn" là sao? Giải thích ngắn gọn.          
+  Cho 1 ví dụ rõ hơn về "copay cố định có thể lớn hơn số tiền còn lại"          
+
+⏺ 1. Exclusions (điều khoản loại trừ)
+
+  Exclusion là danh sách những bệnh hoặc dịch vụ mà policy không bao giờ chi 
+  trả, bất kể còn bao nhiêu hạn mức hay đã tham gia bao lâu.
+
+  Nó khác với hai quy tắc từ chối còn lại:
+
+  ┌──────────────┬───────────────────────────────────┬─────────────────────┐
+  │   Quy tắc    │             Bản chất              │        Ví dụ        │
+  ├──────────────┼───────────────────────────────────┼─────────────────────┤
+  │ Waiting      │ Từ chối tạm thời, hết thời gian   │ Làm răng trong 90   │
+  │ period       │ chờ là được trả                   │ ngày đầu            │
+  ├──────────────┼───────────────────────────────────┼─────────────────────┤
+  │ Hết hạn mức  │ Từ chối vì hết tiền, sang năm lại │ Physio đã dùng hết  │
+  │              │  được                             │ 6,000               │
+  ├──────────────┼───────────────────────────────────┼─────────────────────┤
+  │ Exclusion    │ Từ chối vĩnh viễn, không bao giờ  │ Tẩy trắng răng      │
+  │              │ được trả                          │                     │
+  └──────────────┴───────────────────────────────────┴─────────────────────┘
+
+  Một số exclusion thường gặp ngoài thực tế: phẫu thuật thẩm mỹ, tự gây thương
+  tích, điều trị thử nghiệm, bệnh có từ trước khi mua bảo hiểm, chấn thương do
+  say rượu lái xe, điều trị vô sinh.
+
+  Trong thiết kế của mình: exclusion được kiểm tra ở bước 1. Nếu diagnosis chứa
+  một keyword bị loại trừ, expense bị DENIED và không tiêu hao gì (không trừ hạn
+  mức, không trừ lượt khám, không trừ deductible).
+
+  EXP-012 · DENTAL / Filling · diagnosis: "Teeth whitening" · 4,000
+  → khớp keyword "whitening"
+  → DENIED: "Excluded under EXC-01 (Cosmetic procedures). Covered: 0 THB."
+
+  Điểm yếu của cách so khớp keyword:
+  - Bắt nhầm: "Non-cosmetic scar revision" chứa chữ "cosmetic" nên bị từ chối
+    oan.
+  - Bỏ sót: "Rhinoplasty" (sửa mũi) là thẩm mỹ nhưng không chứa keyword nào nên
+    lọt qua.
+
+  Hệ thống thật dùng mã chẩn đoán chuẩn (ICD-10) để tránh hai vấn đề này. Với
+  phạm vi challenge, so khớp keyword là đủ, miễn ghi rõ giới hạn trong README.
+
+  Một phân biệt nhỏ: sub-benefit không có trong policy (ví dụ "Acupuncture")
+  cũng bị DENIED, nhưng lý do là "Not covered under this policy", không phải
+  "Excluded". Hai lý do này nên tách riêng để thành viên hiểu đúng.
+
+  2. "Không miễn waiting period cho tai nạn"
+
+  Waiting period tồn tại để ngăn người biết mình sắp ốm rồi mới mua bảo hiểm.
+  Tai nạn thì không ai đoán trước được, nên ngoài thực tế hầu hết các policy
+  miễn waiting period cho tai nạn.
+
+  Ví dụ: policy có hiệu lực từ 01/01, Outpatient chờ 30 ngày. Ngày 10/01 thành
+  viên bị té xe gãy tay rồi đi khám.
+  - Ngoài thực tế: được chi trả, vì là tai nạn.
+  - Calculator của mình: DENIED, vì expense không có thông tin nào cho biết đây
+    là tai nạn.
+
+  Muốn hỗ trợ trường hợp này thì cần thêm field is_accident vào expense. Mình đề
+  xuất để ngoài phạm vi và ghi vào README.
+
+  3. Copay cố định lớn hơn số tiền còn lại
+
+  Dental có copay cố định 300 THB/lần và deductible 500.
+
+  Trường hợp A: hóa đơn nhỏ hơn mức copay
+
+  Deductible Dental đã trả xong từ lần trước. Thành viên đi cạo vôi răng hết 250
+  THB.
+
+  ┌───────────────┬─────────────────────┬─────────┐
+  │     Bước      │      Tính toán      │ Còn lại │
+  ├───────────────┼─────────────────────┼─────────┤
+  │ Eligible      │ 250                 │ 250     │
+  ├───────────────┼─────────────────────┼─────────┤
+  │ Deductible    │ Đã trả xong → 0     │ 250     │
+  ├───────────────┼─────────────────────┼─────────┤
+  │ Copay cố định │ min(300, 250) = 250 │ 0       │
+  └───────────────┴─────────────────────┴─────────┘
+
+  Covered = 0, member trả 250.
+
+  Trường hợp B: deductible và copay cộng lại nuốt hết hóa đơn
+
+  Deductible Dental còn nguyên 500. Thành viên đi trám răng hết 700 THB.
+
+  ┌───────────────┬───────────────────────┬─────────┐
+  │     Bước      │       Tính toán       │ Còn lại │
+  ├───────────────┼───────────────────────┼─────────┤
+  │ Eligible      │ 700 (dưới trần 3,000) │ 700     │
+  ├───────────────┼───────────────────────┼─────────┤
+  │ Deductible    │ 500                   │ 200     │
+  ├───────────────┼───────────────────────┼─────────┤
+  │ Copay cố định │ min(300, 200) = 200   │ 0       │
+  └───────────────┴───────────────────────┴─────────┘
+
+  Covered = 0, member trả 700.
+
+  Vấn đề: cả hai đều là expense hợp lệ (vẫn tính 1 lượt khám; ở B còn làm giảm
+  deductible), nhưng bảo hiểm trả 0. Không decision nào hiện có mô tả đúng:
+  - DENIED: sai, vì không vi phạm quy tắc nào.
+  - PARTIALLY_COVERED: sai, vì covered = 0.
+  - APPLIED_TO_DEDUCTIBLE: sai với A (không có deductible nào), và chỉ đúng một
+    phần với B.
+
+  Đề xuất: gộp thành một decision chung là NO_PAYOUT, dùng khi expense hợp lệ
+  nhưng deductible và/hoặc copay nuốt hết số tiền. Lý do đi kèm sẽ nói rõ nguyên
+  nhân:
+  - A: "Amount 250 THB is below the fixed copay of 300 THB. Covered: 0 THB."
+  - B: "Deductible 500 THB + copay 200 THB absorbed the full amount. Covered: 0 
+    THB."
+
+  NO_PAYOUT thay luôn cho APPLIED_TO_DEDUCTIBLE, nên danh sách chỉ còn 4
+  decision: COVERED, PARTIALLY_COVERED, NO_PAYOUT, DENIED. Phương án này vừa gọn
+  vừa bao được mọi trường hợp covered = 0 mà không phải từ chối. Bạn đồng ý
+  không?
+
+❯ Ok hãy ghi vào file markdown tạm trước để note lại các quyết định, khoan ghi  
+  vào Readme.                                                                   
+
+⏺ Write(DESIGN_NOTES.md)
+  ⎿  Wrote 207 lines to DESIGN_NOTES.md
+       1 # Design Notes — Policy Benefits Calculator (tạm)
+       3 > File ghi chú tạm các quyết định thiết kế. Sẽ chuyển nội dung c
+         hính thức sang README sau.
+       5 ## 1. Phạm vi
+       6 
+         hải hệ thống (không UI, DB, API).
+       8 - Hàm cốt lõi: `calculate(policy, expenses) → { results per expe
+       9 - Xử lý **theo lô, có trạng thái**: sắp expense theo ngày, xử lý
+          lần lượt; expense trước tiêu hao hạn mức, lượt khám, deductible
+      10 - Policy áp dụng cho **1 thành viên**.
+     … +250 lines (ctrl+o to expand)
+
+⏺ Mình đã ghi các quyết định vào DESIGN_NOTES.md ở thư mục gốc của repo, chưa
+  đụng tới README.
+
+  Hai điểm bạn nên lưu ý khi đọc lại:
+  - Mục 2 (D7): mình hiểu chữ "Ok" của bạn là đồng ý dùng NO_PAYOUT thay cho
+    APPLIED_TO_DEDUCTIBLE, nên đã ghi theo hướng đó. Nếu chưa đúng ý bạn thì báo
+    mình sửa.
+  - Mục 8 (câu hỏi còn mở): mình thêm hai câu hỏi mới chưa bàn tới, mỗi câu kèm
+    một đề xuất:
+    - Nhiều expense cùng ngày thì xử lý theo thứ tự nào: đề xuất sắp theo date
+      rồi đến expense_id.
+    - Copay % ra số lẻ thì làm tròn thế nào: đề xuất giữ 2 chữ số thập phân.
+
+  Các mục khác trong file:
+  1. Phạm vi bài toán
+  2. Bảng quyết định D1–D9, mỗi dòng kèm lý do
+  3. Chuỗi xử lý 5 bước và bảng phân biệt 3 loại limit
+  4. Bốn decision, mỗi loại có ví dụ lý do
+  5. Output của mỗi expense và 2 đẳng thức luôn phải đúng (dùng để test)
+  6. Bản nháp policy JSON, quy tắc kế thừa và bảng benefit nào phục vụ kịch bản
+     test nào
+  7. Các giả định và phần để ngoài phạm vi
+
+  Bước tiếp theo, bạn muốn chọn ngôn ngữ/stack hay thiết kế 20 expense trước?
+
+❯ Về ngôn ngữ lập trình, tôi nghĩ javascript.                                   
+  Nhiều expense sẽ xử lý theo date, rồi theo id.                                
+  Làm tròn số tiền tại sao lại là 2 chữ số thập phân?                           
+
+⏺ Update(DESIGN_NOTES.md)
+  ⎿  Added 2 lines
+      22  | D7 | 4 decision: `COVERED`, `PARTIALLY_COVERED`, `NO_PAYOUT`,
+           `DENIED` (mục 4) | `NO_PAYOUT` bao mọi trường hợp expense hợp 
+          lệ nhưng covered = 0 (do deductible và/hoặc copay) |
+      23  | D8 | Copay có 2 loại: `PERCENTAGE` và `FIXED`. Copay cố định 
+          = `min(value, phần còn lại)` | Copay không được vượt quá số tiề
+          n còn lại |
+      24  | D9 | Exclusion xác định bằng **so khớp keyword** (không phân 
+          biệt hoa thường) trong `diagnosis` | Đơn giản, minh bạch; hệ th
+          ống thật dùng ICD-10 |
+      25 +| D10 | Ngôn ngữ: **JavaScript** | |                           
+      26 +| D11 | Thứ tự xử lý: sắp theo `date`, cùng ngày thì theo `expe
+         +nse_id` | Kết quả xác định (deterministic), không phụ thuộc thứ
+         + tự input |                                                    
+      27  
+      28  ## 3. Chuỗi xử lý mỗi expense
+      29  
+
+⏺ Update(DESIGN_NOTES.md)
+  ⎿  Added 4 lines, removed 3 lines
+      203  
+      204  ## 8. Câu hỏi còn mở
+      205  
+      206 -- [ ] Ngôn ngữ / stack                                        
+      206 +- [x] Ngôn ngữ → JavaScript (D10)                             
+      207 +- [x] Nhiều expense cùng ngày → theo `date`, rồi `expense_id` 
+          +(D11)                                                         
+      208  - [ ] Thiết kế 20 expense phủ đủ kịch bản
+      208 -- [ ] Nhiều expense cùng ngày: thứ tự xử lý? (đề xuất: theo `d
+          -ate`, rồi `expense_id`)                                       
+      209 -- [ ] Làm tròn số tiền khi copay % ra số lẻ? (đề xuất: 2 chữ s
+          -ố thập phân)                                                  
+      209 +- [ ] Làm tròn số tiền khi copay % ra số lẻ                   
+      210 +- [ ] Test framework                                          
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Vì sao làm tròn 2 chữ số thập phân?
+
+  Lý do chính: đó là đơn vị nhỏ nhất của đồng Baht. 1 Baht = 100 satang, và
+  chuẩn tiền tệ quốc tế ISO 4217 quy định THB có 2 chữ số thập phân. Nguyên tắc
+  chung là làm tròn về đơn vị nhỏ nhất của loại tiền đang dùng: USD và THB có 2
+  chữ số, còn VND hay JPY thì 0 chữ số.
+
+  Kể cả khi hóa đơn toàn là số nguyên, số lẻ vẫn xuất hiện khi tính copay %:
+  - 20% của 1,333 = 266.6
+  - 10% của 4,567 = 456.7
+
+  Tuy vậy, làm tròn về Baht nguyên cũng là một lựa chọn hợp lệ. Output mẫu của
+  đề toàn số nguyên, và ngoài thực tế đồng satang ít được dùng. Hai lựa chọn này
+  nên để bạn chốt.
+
+  Vấn đề thật sự khi dùng JavaScript: phép tính số thực
+
+  Đây là điều quan trọng hơn cả chuyện chọn 1 hay 2 chữ số. Mình vừa chạy thử
+  trên Node:
+
+  4567 * 0.1              → 456.70000000000005
+  0.1 + 0.2               → 0.30000000000000004
+  (1.005).toFixed(2)      → "1.00"    (đúng ra phải là 1.01)
+
+  Nếu tính tiền trực tiếp bằng số thực, sai số sẽ cộng dồn qua 20 expense và các
+  phép kiểm tra kiểu submitted === covered + member_pays sẽ fail ngẫu nhiên.
+
+  Cách xử lý: tính toàn bộ bằng số nguyên theo đơn vị satang, chỉ đổi ra Baht
+  khi xuất output.
+
+  4,567 Baht  →  456,700 satang
+  10% copay   →  Math.round(456700 × 10 / 100) = 45,670 satang   (chính xác
+  tuyệt đối)
+  Output      →  456.70 Baht
+
+  Làm tròn phần nào? Chỉ làm tròn copay, phần còn lại lấy bằng phép trừ
+
+  Nếu làm tròn copay và covered một cách độc lập, tổng có thể lệch khỏi số tiền
+  gốc. Ví dụ hóa đơn 12.25 Baht, copay 10%:
+
+  ┌────────────────┬────────────┬──────────────────┬───────┬───────────────┐
+  │    Cách làm    │   Copay    │     Covered      │ Tổng  │               │
+  ├────────────────┼────────────┼──────────────────┼───────┼───────────────┤
+  │ Làm tròn cả    │ 1.225 →    │ 11.025 → 11.03   │ 12.26 │ ❌ lệch 1     │
+  │ hai            │ 1.23       │                  │       │ satang        │
+  ├────────────────┼────────────┼──────────────────┼───────┼───────────────┤
+  │ Chỉ làm tròn   │ 1.225 →    │ 12.25 − 1.23 =   │ 12.25 │ ✅            │
+  │ copay          │ 1.23       │ 11.02            │       │               │
+  └────────────────┴────────────┴──────────────────┴───────┴───────────────┘
+
+  Quy tắc đề xuất: làm tròn copay theo kiểu half-up (0.5 làm tròn lên), còn 
+  covered = phần còn lại − copay. Cách này giữ hai đẳng thức ở mục 5 luôn đúng.
+
+  Cần bạn chốt
+
+  1. Làm tròn:
+     - 2 chữ số (satang). Mình đề xuất phương án này: đúng chuẩn tiền tệ, và hóa
+       đơn thật hay có số lẻ như 1,234.50.
+     - Hay Baht nguyên.
+
+     Dù chọn phương án nào, bên trong vẫn nên tính bằng số nguyên.
+  2. Test framework:
+     - node:test. Mình đề xuất phương án này: có sẵn trong Node từ bản 18, không
+       cần cài package nào, repo gọn và người chấm chỉ cần chạy node --test.
+     - Hay Jest. Phổ biến và quen thuộc với người chấm hơn, nhưng phải cài thêm
+       dependency.
+
+  Mình đã cập nhật DESIGN_NOTES.md: ghi JavaScript (D10) và thứ tự xử lý date →
+  id (D11), đánh dấu 2 câu này đã xong ở mục 8, và thêm câu "Test framework" vào
+  danh sách còn mở. Chuyện làm tròn vẫn để mở chờ bạn chốt.
+
+❯ Ok tôi đồng ý với cách làm tròn và test framework                             
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Update(DESIGN_NOTES.md)
+  ⎿  Added 3 lines
+      24  | D9 | Exclusion xác định bằng **so khớp keyword** (không phân 
+          biệt hoa thường) trong `diagnosis` | Đơn giản, minh bạch; hệ th
+          ống thật dùng ICD-10 |
+      25  | D10 | Ngôn ngữ: **JavaScript** | |
+      26  | D11 | Thứ tự xử lý: sắp theo `date`, cùng ngày thì theo `expe
+          nse_id` | Kết quả xác định (deterministic), không phụ thuộc thứ
+           tự input |
+      27 +| D12 | Tiền: **tính bên trong bằng số nguyên satang** (1 THB =
+         + 100 satang), output ra THB với tối đa 2 chữ số thập phân | Trá
+         +nh sai số số thực của JS (`4567 * 0.1 = 456.70000000000005`); 2
+         + chữ số = đơn vị nhỏ nhất của THB (ISO 4217) |                 
+      28 +| D13 | Làm tròn: **chỉ làm tròn copay** (half-up), `covered = 
+         +phần còn lại − copay` | Làm tròn độc lập cả hai có thể lệch tổn
+         +g 1 satang; cách này giữ bất biến ở mục 5 luôn đúng |          
+      29 +| D14 | Test framework: **`node:test`** (built-in), chạy bằng `
+         +node --test` | Không cần dependency, có sẵn từ Node 18 |       
+      30  
+      31  ## 3. Chuỗi xử lý mỗi expense
+      32  
+
+⏺ Update(DESIGN_NOTES.md)
+  ⎿  Added 2 lines, removed 2 lines
+      209  - [x] Ngôn ngữ → JavaScript (D10)
+      210  - [x] Nhiều expense cùng ngày → theo `date`, rồi `expense_id` 
+           (D11)
+      211  - [ ] Thiết kế 20 expense phủ đủ kịch bản
+      212 -- [ ] Làm tròn số tiền khi copay % ra số lẻ                   
+      213 -- [ ] Test framework                                          
+      212 +- [x] Làm tròn → satang nội bộ, chỉ làm tròn copay half-up (D1
+          +2, D13)                                                       
+      213 +- [x] Test framework → `node:test` (D14)                      
+
+⏺ Mình đã ghi hai quyết định này vào DESIGN_NOTES.md:
+  - D12: bên trong tính bằng số nguyên satang, output ra THB với 2 chữ số thập
+    phân.
+  - D13: chỉ làm tròn copay theo kiểu half-up, còn covered lấy bằng phép trừ.
+  - D14: test bằng node:test. Máy bạn đang chạy Node v24.15.0, nên dùng được
+    ngay mà không cần cài gì.
+
+  Giờ chỉ còn một việc mở: thiết kế 20 expense. Mình đề xuất làm theo 2 bước:
+
+  1. Lập bảng kịch bản trước. Liệt kê mọi kịch bản cần phủ, gồm 6 kịch bản đề
+     yêu cầu cộng thêm các edge case đã chốt (per-visit cap, NO_PAYOUT, hết quỹ
+     chung, cạn annual limit tổng, expense ngoài thời hạn policy, sub-benefit
+     không tồn tại, nhiều expense cùng ngày…). Sau đó sắp xếp chúng theo thời
+     gian trong năm 2024, sao cho expense trước làm cạn hạn mức đúng lúc expense
+     sau cần.
+  2. Tính expected output bằng tay cho từng expense, trước khi viết code. Việc
+     này quan trọng: nếu dùng chính code để sinh expected output thì test chỉ
+     xác nhận code giống chính nó, bug nào cũng lọt qua. Tính tay mới giúp bắt
+     được bug thật.
+
+  Mình bắt đầu lập bảng kịch bản nhé?
+
+❯ Sử dụng /superpowers:brainstorming để kiểm tra đề bài, policy và thiết kế đủ  
+  20 expense                                                                    
+  @AI_Engineering_Challenges/AI_Challenge_06.md ,  @DESIGN_NOTES.md.              ⎿  Read AI_Engineering_Challenges/AI_Challenge_06.md (78 lines)
+  ⎿  Read DESIGN_NOTES.md (214 lines)
+
+⏺ Skill(superpowers:brainstorming)
+  ⎿  Successfully loaded skill
+
+⏺ Mình dùng skill brainstorming cho phần này. Mình xếp nó vào nhóm
+  architectural, vì đây là dự án mới, chưa có dòng code nào, nên sẽ đi theo quy
+  trình đầy đủ. Phần hỏi đáp làm rõ yêu cầu đã xong ở các lượt trước, nên lượt
+  này mình trình bày thiết kế dữ liệu để bạn duyệt. Chưa có file nào bị sửa.
+
+  Phần 1: Đối chiếu đề bài với thiết kế
+
+  ┌─────────────────────────────────┬──────────────────────┬────────────────┐
+  │         Yêu cầu của đề          │     Đáp ứng bằng     │   Trạng thái   │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ Annual limit, per-visit         │ Policy schema +      │                │
+  │ sub-limit, copay %/cố định,     │ chuỗi 5 bước         │ ✅             │
+  │ deductible, waiting period      │                      │                │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ Xử lý theo thứ tự thời gian     │ D11                  │ ✅             │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ Lý do cụ thể khi bị từ chối     │ Mục 4                │ ✅             │
+  │ hoặc cắt giảm                   │                      │                │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │                                 │                      │ ⚠️ cần làm rõ  │
+  │ Summary số dư theo từng benefit │ Mục 5                │ (xem điểm 5    │
+  │                                 │                      │ bên dưới)      │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ 20 expense phủ 6 kịch bản       │ Phần 3               │ ✅             │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ ≥10 unit test                   │ Chưa thiết kế        │ Làm ở bước     │
+  │                                 │                      │ spec           │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ Module tái sử dụng              │ calculate(policy,    │ ✅             │
+  │                                 │ expenses)            │                │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ Ước lượng timeline (mục Note    │ Chưa có              │ ❌ thiếu       │
+  │ của đề)                         │                      │                │
+  ├─────────────────────────────────┼──────────────────────┼────────────────┤
+  │ Nộp expected outputs + kết quả  │ Chưa có              │ Làm ở bước     │
+  │ test                            │                      │ spec           │
+  └─────────────────────────────────┴──────────────────────┴────────────────┘
+
+  Khi tính tay 20 expense, mình phát hiện 5 lỗ hổng trong DESIGN_NOTES:
+
+  1. Mâu thuẫn giữa bước 5 và giả định 2. Bước 5 ghi "hạn mức còn lại = 0 →
+     DENIED". Nhưng tới bước 5 thì deductible đã bị trừ ở bước 3, trong khi giả
+     định 2 lại nói expense bị DENIED không tiêu hao deductible.
+     Sửa: chuyển việc kiểm tra "hạn mức đã cạn" lên bước 1. Bước 5 chỉ còn nhiệm
+     vụ cắt bớt số tiền.
+  2. Chưa định nghĩa ranh giới waiting period.
+     Sửa: được chi trả từ ngày effective_date + N ngày trở đi. Ví dụ Outpatient
+     chờ 30 ngày thì từ 2024-01-31 mới được chi trả.
+  3. Chưa định nghĩa thứ tự khi một expense trượt nhiều điều kiện cùng lúc.
+     Sửa: kiểm tra lần lượt ngày hiệu lực → benefit có tồn tại → exclusion →
+     waiting period → lượt khám → hạn mức đã cạn. Lý do trả về là điều kiện đầu
+     tiên bị trượt.
+  4. remaining_visit_limit với sub-benefit không giới hạn lượt (Filling,
+     Surgery…).
+     Sửa: trả về null.
+  5. Summary dễ gây hiểu lầm. Cuối năm, Outpatient tự nó còn 16,960, nhưng
+     annual limit tổng đã về 0, nên thực tế không dùng thêm được đồng nào.
+     Sửa: summary hiển thị cả số dư riêng (remaining) lẫn số tiền thực sự còn
+     dùng được (available = min của các tầng phía trên).
+
+  Thêm một quy ước: với expense bị DENIED, not_covered_amount bằng toàn bộ số
+  tiền, để hai đẳng thức ở mục 5 luôn đúng.
+
+  Phần 2: Điều chỉnh policy
+
+  Để 20 expense chạm được đủ các tầng hạn mức, cần sửa 2 con số:
+
+  Trường: INPATIENT.annual_limit
+  Cũ: 70,000
+  Mới: 90,000
+  Lý do: Với 70k, tổng chi trả tối đa của cả policy chỉ khoảng 85k, nên annual
+  limit 100k không bao giờ cạn
+  ────────────────────────────────────────
+  Trường: Physiotherapy.annual_limit
+  Cũ: 6,000
+  Mới: 2,000
+  Lý do: Chỉ cần 3 expense để thể hiện đủ: dùng bình thường → bị cắt một phần →
+  cạn hẳn
+
+  Phần 3: 20 expense
+
+  Mốc thời gian (policy hiệu lực từ 2024-01-01): Outpatient/Inpatient được chi
+  trả từ 01-31, Optical từ 03-01, Dental từ 03-31, Root Canal từ 06-29.
+
+  Input
+
+  ┌─────┬───────┬───────────────────────┬──────────────────────┬─────────┐
+  │ ID  │ Ngày  │ Benefit / Sub-benefit │      Chẩn đoán       │ Số tiền │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 01  │ 01-10 │ OPD / Doctor Visit    │ Acute bronchitis     │ 1,200   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 02  │ 01-31 │ OPD / Doctor Visit    │ Common cold          │ 800     │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 03  │ 02-12 │ OPD / Doctor Visit    │ Acute bronchitis     │ 2,500   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 04  │ 02-20 │ IPD / Hospital Stay   │ Dengue fever         │ 18,500  │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 05  │ 03-05 │ OPD / Physiotherapy   │ Lower back pain      │ 1,500   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 06  │ 03-19 │ OPD / Physiotherapy   │ Lower back pain      │ 1,500   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 07  │ 04-02 │ OPD / Physiotherapy   │ Lower back pain      │ 1,500   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 08  │ 04-03 │ DENTAL / Cleaning     │ Dental plaque        │ 1,200   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 09  │ 04-18 │ DENTAL / Filling      │ Dental caries        │ 4,000   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 10  │ 05-06 │ DENTAL / Cleaning     │ Routine scaling      │ 250     │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 11  │ 05-10 │ DENTAL / Root Canal   │ Pulpitis             │ 7,500   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 12  │ 06-03 │ OPD / Acupuncture     │ Neck pain            │ 1,500   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 13  │ 06-20 │ IPD / Surgery         │ Cosmetic rhinoplasty │ 45,000  │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 14  │ 07-08 │ DENTAL / Cleaning     │ Dental plaque        │ 900     │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 15  │ 07-15 │ DENTAL / Root Canal   │ Pulpitis             │ 7,500   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 16  │ 08-05 │ OPTICAL / Glasses     │ Myopia               │ 4,000   │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 17  │ 08-05 │ OPTICAL / Eye Exam    │ Myopia               │ 800     │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 18  │ 09-10 │ IPD / Surgery         │ Acute appendicitis   │ 60,000  │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 19  │ 11-20 │ IPD / Hospital Stay   │ Pneumonia            │ 25,000  │
+  ├─────┼───────┼───────────────────────┼──────────────────────┼─────────┤
+  │ 20  │ 12-16 │ OPD / Doctor Visit    │ Influenza            │ 1,000   │
+  └─────┴───────┴───────────────────────┴──────────────────────┴─────────┘
+
+  Expected output (tính tay)
+
+  ID: 01
+  Vượt trần/HM: 1,200
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 1,200
+  Decision: DENIED
+  Annual còn: 100,000
+  Lượt còn: 30
+  Lý do chính: Waiting period OPD 30 ngày, được chi trả từ 01-31
+  ────────────────────────────────────────
+  ID: 02
+  Vượt trần/HM: 0
+  Ded: 800
+  Copay: 0
+  Covered: 0
+  Member: 800
+  Decision: NO_PAYOUT
+  Annual còn: 100,000
+  Lượt còn: 29
+  Lý do chính: Deductible hấp thụ toàn bộ (ded OPD còn 200). Rơi đúng ngày 30
+  ────────────────────────────────────────
+  ID: 03
+  Vượt trần/HM: 1,000
+  Ded: 200
+  Copay: 260
+  Covered: 1,040
+  Member: 1,460
+  Decision: PARTIAL
+  Annual còn: 98,960
+  Lượt còn: 28
+  Lý do chính: Trần 1,500/lần + phần deductible còn lại + copay 20%
+  ────────────────────────────────────────
+  ID: 04
+  Vượt trần/HM: 0
+  Ded: 0
+  Copay: 0
+  Covered: 18,500
+  Member: 0
+  Decision: COVERED
+  Annual còn: 80,460
+  Lượt còn: null
+  Lý do chính: Chi trả toàn bộ
+  ────────────────────────────────────────
+  ID: 05
+  Vượt trần/HM: 0
+  Ded: 0
+  Copay: 300
+  Covered: 1,200
+  Member: 300
+  Decision: PARTIAL
+  Annual còn: 79,260
+  Lượt còn: 9
+  Lý do chính: Copay 20% (HM Physio còn 800)
+  ────────────────────────────────────────
+  ID: 06
+  Vượt trần/HM: 400
+  Ded: 0
+  Copay: 300
+  Covered: 800
+  Member: 700
+  Decision: PARTIAL
+  Annual còn: 78,460
+  Lượt còn: 8
+  Lý do chính: HM Physio chỉ còn 800
+  ────────────────────────────────────────
+  ID: 07
+  Vượt trần/HM: 1,500
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 1,500
+  Decision: DENIED
+  Annual còn: 78,460
+  Lượt còn: 8
+  Lý do chính: HM Physio đã cạn
+  ────────────────────────────────────────
+  ID: 08
+  Vượt trần/HM: 0
+  Ded: 500
+  Copay: 300
+  Covered: 400
+  Member: 800
+  Decision: PARTIAL
+  Annual còn: 78,060
+  Lượt còn: 1
+  Lý do chính: Deductible Dental + copay cố định 300
+  ────────────────────────────────────────
+  ID: 09
+  Vượt trần/HM: 1,000
+  Ded: 0
+  Copay: 300
+  Covered: 2,700
+  Member: 1,300
+  Decision: PARTIAL
+  Annual còn: 75,360
+  Lượt còn: null
+  Lý do chính: Trần Filling 3,000 + copay cố định
+  ────────────────────────────────────────
+  ID: 10
+  Vượt trần/HM: 0
+  Ded: 0
+  Copay: 250
+  Covered: 0
+  Member: 250
+  Decision: NO_PAYOUT
+  Annual còn: 75,360
+  Lượt còn: 0
+  Lý do chính: Số tiền 250 thấp hơn copay cố định 300
+  ────────────────────────────────────────
+  ID: 11
+  Vượt trần/HM: 7,500
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 7,500
+  Decision: DENIED
+  Annual còn: 75,360
+  Lượt còn: null
+  Lý do chính: Waiting period riêng của Root Canal 180 ngày, được chi trả từ
+  06-29
+  ────────────────────────────────────────
+  ID: 12
+  Vượt trần/HM: 1,500
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 1,500
+  Decision: DENIED
+  Annual còn: 75,360
+  Lượt còn: null
+  Lý do chính: Acupuncture không có trong policy
+  ────────────────────────────────────────
+  ID: 13
+  Vượt trần/HM: 45,000
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 45,000
+  Decision: DENIED
+  Annual còn: 75,360
+  Lượt còn: null
+  Lý do chính: Exclusion EXC-01 (Cosmetic)
+  ────────────────────────────────────────
+  ID: 14
+  Vượt trần/HM: 900
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 900
+  Decision: DENIED
+  Annual còn: 75,360
+  Lượt còn: 0
+  Lý do chính: Đã dùng hết 2/2 lượt Cleaning
+  ────────────────────────────────────────
+  ID: 15
+  Vượt trần/HM: 300
+  Ded: 0
+  Copay: 300
+  Covered: 6,900
+  Member: 600
+  Decision: PARTIAL
+  Annual còn: 68,460
+  Lượt còn: null
+  Lý do chính: HM Dental chỉ còn 6,900 (tầng benefit)
+  ────────────────────────────────────────
+  ID: 16
+  Vượt trần/HM: 1,600
+  Ded: 0
+  Copay: 400
+  Covered: 2,000
+  Member: 2,000
+  Decision: PARTIAL
+  Annual còn: 66,460
+  Lượt còn: 0
+  Lý do chính: Quỹ chung Dental+Optical chỉ còn 2,000
+  ────────────────────────────────────────
+  ID: 17
+  Vượt trần/HM: 800
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 800
+  Decision: DENIED
+  Annual còn: 66,460
+  Lượt còn: 1
+  Lý do chính: Quỹ chung đã cạn, dù Optical vẫn còn 6,000 và còn 1 lượt
+  ────────────────────────────────────────
+  ID: 18
+  Vượt trần/HM: 10,000
+  Ded: 0
+  Copay: 0
+  Covered: 50,000
+  Member: 10,000
+  Decision: PARTIAL
+  Annual còn: 16,460
+  Lượt còn: null
+  Lý do chính: Trần Surgery 50,000/lần
+  ────────────────────────────────────────
+  ID: 19
+  Vượt trần/HM: 8,540
+  Ded: 0
+  Copay: 0
+  Covered: 16,460
+  Member: 8,540
+  Decision: PARTIAL
+  Annual còn: 0
+  Lượt còn: null
+  Lý do chính: Annual limit tổng chỉ còn 16,460
+  ────────────────────────────────────────
+  ID: 20
+  Vượt trần/HM: 1,000
+  Ded: 0
+  Copay: 0
+  Covered: 0
+  Member: 1,000
+  Decision: DENIED
+  Annual còn: 0
+  Lượt còn: 28
+  Lý do chính: Annual limit tổng đã cạn, dù Outpatient vẫn còn 16,960
+
+  Hàng nào cũng thỏa hai đẳng thức: covered + member = số tiền và member = vượt 
+  trần/HM + ded + copay. Tổng covered cả năm là 100,000, đúng bằng annual limit.
+
+  Mấy điểm đáng chú ý trong bộ dữ liệu:
+  - EXP-11 và EXP-15 là cùng một ca Root Canal: nộp tháng 5 bị từ chối vì
+    waiting period, nộp lại tháng 7 thì được trả.
+  - EXP-16 và EXP-17 cùng ngày, nên thứ tự theo ID quyết định kết quả. Nếu Eye
+    Exam được xử lý trước, nó sẽ được trả 720 và Glasses chỉ còn 1,280.
+  - EXP-03 là chính expense mẫu trong đề (2,500, Acute bronchitis), nhưng kết
+    quả khác vì policy của mình có trần 1,500/lần và có deductible. Output mẫu
+    của đề chỉ để minh họa định dạng; điều này cần ghi rõ trong README.
+
+  Bảng phủ kịch bản
+
+  ┌──────────────────────────────────────┬──────────────────────────────────┐
+  │               Kịch bản               │             Expense              │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Chi trả trọn vẹn                     │ 04                               │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Chi trả một phần do copay (% và cố   │ 05, 08, 09                       │
+  │ định)                                │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ DENIED vì waiting period (tầng       │ 01 / 11                          │
+  │ benefit / ghi đè ở sub-benefit)      │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ DENIED vì exclusion                  │ 13                               │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ DENIED vì hết hạn mức (sub-benefit / │ 07 / 17 / 20                     │
+  │  quỹ chung / annual)                 │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Chi trả một phần vì hạn mức còn lại  │                                  │
+  │ < chi phí (sub / benefit / quỹ chung │ 06 / 15 / 16 / 19                │
+  │  / annual)                           │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Per-visit cap                        │ 03, 09, 18                       │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Deductible (trả hết / trả một phần)  │ 02 / 03, 08                      │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ NO_PAYOUT (do deductible / do copay  │ 02 / 10                          │
+  │ cố định)                             │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Hết lượt khám · Sub-benefit không    │ 14 · 12                          │
+  │ tồn tại                              │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Rơi đúng ranh giới waiting period ·  │ 02 · 16–17                       │
+  │ Cùng ngày                            │                                  │
+  ├──────────────────────────────────────┼──────────────────────────────────┤
+  │ Nhiều expense cùng tiêu hao một hạn  │ 02–03 (deductible), 05–07        │
+  │ mức                                  │ (Physio), 08–17 (quỹ chung),     │
+  │                                      │ toàn bộ (annual)                 │
+  └──────────────────────────────────────┴──────────────────────────────────┘
+
+  Không có trong bộ 20 expense, sẽ phủ bằng unit test: expense ngoài thời hạn
+  policy, benefit_type không tồn tại, làm tròn số lẻ satang, input không theo
+  thứ tự ngày.
+
+  ---
+
+  Bạn duyệt thiết kế này không? Cụ thể gồm 5 chỗ sửa ở Phần 1, 2 điều chỉnh ở
+  Phần 2, và bộ 20 expense cùng expected output. Nếu duyệt, mình sẽ cập nhật
+  DESIGN_NOTES.md rồi chuyển sang thiết kế unit test và ước lượng timeline.
+
+❯ Ok duyệt                                                                      
+
+⏺ Write(DESIGN_NOTES.md)
+  ⎿  Added 140 lines, removed 43 lines
+      27  | D12 | Tiền: **tính bên trong bằng số nguyên satang** (1 THB =
+           100 satang), output ra THB với tối đa 2 chữ số thập phân | Trá
+          nh sai số số thực của JS (`4567 * 0.1 = 456.70000000000005`); 2
+           chữ số = đơn vị nhỏ nhất của THB (ISO 4217) |
+      28  | D13 | Làm tròn: **chỉ làm tròn copay** (half-up), `covered = 
+          phần còn lại − copay` | Làm tròn độc lập cả hai có thể lệch tổn
+          g 1 satang; cách này giữ bất biến ở mục 5 luôn đúng |
+      29  | D14 | Test framework: **`node:test`** (built-in), chạy bằng `
+          node --test` | Không cần dependency, có sẵn từ Node 18 |
+      30 +| D15 | Kiểm tra **"hạn mức đã cạn"** nằm ở **bước 1**, không p
+         +hải bước 5 | Nếu để ở bước 5 thì deductible đã bị trừ ở bước 3 
+         +trước khi phát hiện DENIED → mâu thuẫn giả định "DENIED không t
+         +iêu hao gì" |                                                  
+      31 +| D16 | Ranh giới waiting period: **được chi trả từ ngày `effec
+         +tive_date + N ngày`** trở đi | Ví dụ OPD 30 ngày, hiệu lực 2024
+         +-01-01 → chi trả từ 2024-01-31; ngày 2024-01-30 bị từ chối |   
+      32 +| D17 | Bước 1 kiểm tra theo **thứ tự cố định**, trả về lý do c
+         +ủa điều kiện **đầu tiên** bị trượt | Kết quả xác định khi một e
+         +xpense trượt nhiều điều kiện |                                 
+      33 +| D18 | `remaining_visit_limit = null` khi sub-benefit không có
+         + `max_visits` | Phân biệt "không giới hạn" với "còn 0 lượt" |  
+      34 +| D19 | Summary hiển thị cả **`remaining`** (số dư riêng của tầ
+         +ng) và **`available`** (= min của tầng đó và các tầng cha) | Tr
+         +ánh hiểu lầm: OPD còn 16,960 nhưng annual tổng = 0 thì thực tế 
+         +không dùng được |                                              
+      35 +| D20 | Expense `DENIED`: `not_covered_amount` = toàn bộ số tiề
+         +n | Giữ bất biến ở mục 5 đúng cho mọi decision |               
+      36  
+      37  ## 3. Chuỗi xử lý mỗi expense
+      38  
+      39  ```
+      34 -1. Kiểm tra điều kiện → không đạt thì DENIED, dừng luôn        
+      35 -   - Ngày expense nằm trong [effective_date, expiry_date]?     
+      36 -   - benefit_type / sub_benefit có trong policy?               
+      37 -   - Có dính exclusion?                                        
+      38 -   - Đã qua waiting period? (expense.date - policy.effective_da
+         -te)                                                            
+      39 -   - Còn lượt khám? (max_visits)                               
+      40 +1. Kiểm tra điều kiện → không đạt thì DENIED, dừng luôn (theo đ
+         +úng thứ tự, D17)                                               
+      41 +   a. Ngày expense nằm trong [effective_date, expiry_date]?    
+      42 +   b. benefit_type có trong policy?  sub_benefit có trong benef
+         +it?                                                            
+      43 +   c. Có dính exclusion?                                       
+      44 +   d. Đã qua waiting period? (date >= effective_date + waiting_
+         +period_days)                                                   
+      45 +   e. Còn lượt khám? (max_visits)                              
+      46 +   f. Có tầng hạn mức nào đã cạn (còn 0)? (sub_benefit → benefi
+         +t → limit_group → policy)                                      
+      47  2. Per-visit cap   → eligible = min(amount, per_visit_cap)
+      48                       phần vượt trần → not_covered_amount
+      49  3. Deductible      → trừ deductible còn lại của benefit
+      43 -4. Copay           → PERCENTAGE: % của phần còn lại            
+      50 +4. Copay           → PERCENTAGE: % của phần còn lại, làm tròn h
+         +alf-up tới satang                                              
+      51                       FIXED: min(value, phần còn lại)
+      45 -5. Limit caps      → covered = min(kết quả bước 4,             
+      46 -                                   hạn mức còn lại của sub_bene
+         -fit,                                                           
+      47 -                                   benefit,                    
+      48 -                                   limit_group,                
+      49 -                                   policy annual_limit)        
+      52 +5. Limit caps      → covered = min(kết quả bước 4, hạn mức còn 
+         +lại của                                                        
+      53 +                                   sub_benefit, benefit, limit_
+         +group, policy)                                                 
+      54                       phần bị cắt → not_covered_amount
+      51 -                     nếu hạn mức còn lại = 0 → DENIED          
+      55 +                     (lý do nêu rõ tầng nào cắt)               
+      56  ```
+      57  
+      58  **Phân biệt 3 loại "limit":**
+     ...
+       60  | Loại | Ví dụ | Có trạng thái? | Bước |
+       61  |---|---|---|---|
+       62  | Per-visit cap (trần tiền mỗi lần) | 1,500 THB/lần | Không | 
+           2 |
+       59 -| Visit count limit (số lượt/năm) | 30 lần/năm | Có | 1 |     
+       60 -| Annual limit (tổng tiền/năm, 4 tầng) | Outpatient 20,000/năm
+          - | Có | 5 |                                                   
+       63 +| Visit count limit (số lượt/năm) | 30 lần/năm | Có | 1e |    
+       64 +| Annual limit (tổng tiền/năm, 4 tầng) | Outpatient 20,000/năm
+          + | Có | 1f (đã cạn) và 5 (cắt bớt) |                          
+       65  
+       66  ## 4. Decision
+       67  
+       68  | Decision | Điều kiện | Ví dụ lý do |
+       69  |---|---|---|
+       66 -| `DENIED` | Không qua bước 1, hoặc hạn mức còn lại = 0 ở bước
+          - 5 | "Excluded under EXC-01 (Cosmetic procedures)." / "Outpati
+          -ent annual limit exhausted." |                                
+       70 +| `DENIED` | Không qua bước 1 | "Excluded under EXC-01 (Cosmet
+          +ic procedures)." / "Physiotherapy annual limit exhausted." |  
+       71  | `NO_PAYOUT` | Expense hợp lệ nhưng covered = 0 do deductible
+            và/hoặc copay | "Amount 250 THB is below the fixed copay of 3
+           00 THB." / "Deductible 500 THB + copay 200 THB absorbed the fu
+           ll amount." |
+       72  | `PARTIALLY_COVERED` | 0 < covered < submitted | "20% copay a
+           pplied. Covered: 2000 THB. Member copay: 500 THB." |
+       73  | `COVERED` | covered = submitted | "Fully covered." |
+       74  
+       71 -**Lý do phải cụ thể:** nói rõ tầng nào chặn (ví dụ "hết hạn mứ
+          -c Outpatient", không phải "hết lượt khám"); tách "Not covered 
+          -under this policy" (sub-benefit không tồn tại) khỏi "Excluded"
+          - (dính exclusion).                                            
+       75 +**Lý do phải cụ thể:** nói rõ tầng nào chặn (ví dụ "hết quỹ ch
+          +ung Dental & Optical", không phải "hết hạn mức Optical"); tách
+          + "Not covered under this policy" (sub-benefit không tồn tại) k
+          +hỏi "Excluded" (dính exclusion).                              
+       76  
+       73 -## 5. Output mỗi expense                                      
+       77 +## 5. Output                                                  
+       78  
+       79 +**Mỗi expense:**                                              
+       80 +                                                              
+       81  ```json
+       82  {
+       77 -  "expense_id": "EXP-001",                                    
+       83 +  "expense_id": "EXP-003",                                    
+       84    "submitted_amount": 2500,
+       85    "not_covered_amount": 1000,
+       80 -  "deductible_applied": 500,                                  
+       81 -  "copay_amount": 200,                                        
+       82 -  "covered_amount": 800,                                      
+       83 -  "member_pays": 1700,                                        
+       86 +  "deductible_applied": 200,                                  
+       87 +  "copay_amount": 260,                                        
+       88 +  "covered_amount": 1040,                                     
+       89 +  "member_pays": 1460,                                        
+       90    "decision": "PARTIALLY_COVERED",
+       91    "reason": "...",
+       86 -  "remaining_annual_limit": 99200,                            
+       87 -  "remaining_visit_limit": 29                                 
+       92 +  "remaining_annual_limit": 98960,                            
+       93 +  "remaining_visit_limit": 28                                 
+       94  }
+       95  ```
+       96  
+       97 +- `remaining_annual_limit`: annual limit **tổng của policy** c
+          +òn lại sau expense.                                           
+       98 +- `remaining_visit_limit`: số lượt còn lại của sub-benefit; `n
+          +ull` nếu không giới hạn (D18).                                
+       99 +                                                              
+      100  **Bất biến (dùng để test):**
+      101  - `submitted_amount = covered_amount + member_pays`
+      102  - `member_pays = not_covered_amount + deductible_applied + cop
+           ay_amount`
+      103  
+       95 -Sau khi xử lý hết expense: in **summary số dư còn lại theo từn
+          -g benefit** (hạn mức, deductible, lượt khám), theo từng limit 
+          -group và annual limit tổng.                                   
+      104 +**Summary** sau khi xử lý hết expense: theo policy, từng limit
+          + group, từng benefit (hạn mức, deductible, `remaining`, `avail
+          +able`) và từng sub-benefit (hạn mức riêng nếu có, lượt khám cò
+          +n lại) — D19.                                                 
+      105  
+       97 -## 6. Bản nháp policy JSON                                    
+      106 +## 6. Policy JSON                                             
+      107  
+      108  ```json
+      109  {
+     ...
+      127        "waiting_period_days": 30,
+      128        "sub_benefits": [
+      129          { "name": "Doctor Visit",  "per_visit_cap": 1500, "max
+           _visits": 30 },
+      121 -        { "name": "Physiotherapy", "per_visit_cap": 1500, "max
+          -_visits": 10, "annual_limit": 6000 },                         
+      130 +        { "name": "Physiotherapy", "per_visit_cap": 1500, "max
+          +_visits": 10, "annual_limit": 2000 },                         
+      131          { "name": "Lab Test",      "per_visit_cap": 3000 }
+      132        ]
+      133      },
+      134      {
+      135        "benefit_type": "INPATIENT",
+      127 -      "annual_limit": 70000,                                  
+      136 +      "annual_limit": 90000,                                  
+      137        "deductible": 0,
+      138        "copay": { "type": "PERCENTAGE", "value": 0 },
+      139        "waiting_period_days": 30,
+     ...
+      177  }
+      178  ```
+      179  
+      171 -> Các con số sẽ được tinh chỉnh khi thiết kế 20 expense.      
+      180 +**Thay đổi so với bản nháp đầu:** `INPATIENT.annual_limit` 70,
+          +000 → **90,000** (để annual tổng có thể cạn); `Physiotherapy.a
+          +nnual_limit` 6,000 → **2,000** (3 expense là thể hiện đủ dùng 
+          +→ cắt → cạn).                                                 
+      181  
+      182  **Con số cố ý "chồng" nhau để overlapping thật sự xảy ra:**
+      174 -- Tổng hạn mức các benefit 20k + 70k + 10k + 8k = 108k > annua
+          -l limit 100k → tầng policy có thể là tầng chặn.               
+      175 -- Dental 10k + Optical 8k = 18k > quỹ chung 12k → trường hợp (
+          -b).                                                           
+      183 +- Tổng hạn mức các benefit 20k + 90k + 10k + 8k = 128k > annua
+          +l limit 100k → tầng policy là tầng chặn (EXP-019, EXP-020).   
+      184 +- Dental 10k + Optical 8k = 18k > quỹ chung 12k → trường hợp (
+          +b) (EXP-016, EXP-017).                                        
+      185  
+      186 +**Mốc waiting period** (hiệu lực 2024-01-01): OPD/IPD từ **01-
+          +31** · Optical từ **03-01** · Dental từ **03-31** · Root Canal
+          + từ **06-29**.                                                
+      187 +                                                              
+      188  **Quy tắc kế thừa:**
+      189  
+      190  | Trường | Khai báo ở | Sub-benefit ghi đè? | Không khai báo n
+           ghĩa là |
+     ...
+      197  | `annual_limit` | cả hai | — | Chỉ bị chặn bởi tầng trên |
+      198  | `limit_group` | benefit | — | Không thuộc quỹ chung |
+      199  
+      189 -**Mỗi benefit phục vụ kịch bản test:**                        
+      200 +## 7. Bộ 20 expense                                           
+      201  
+      191 -| Benefit | Kịch bản |                                        
+      202 +**Input** (năm 2024; `provider` bổ sung khi tạo file JSON)    
+      203 +                                                              
+      204 +| ID | Ngày | Benefit / Sub-benefit | Chẩn đoán | Số tiền |   
+      205 +|---|---|---|---|---|                                         
+      206 +| EXP-001 | 01-10 | OUTPATIENT / Doctor Visit | Acute bronchit
+          +is | 1,200 |                                                  
+      207 +| EXP-002 | 01-31 | OUTPATIENT / Doctor Visit | Common cold | 
+          +800 |                                                         
+      208 +| EXP-003 | 02-12 | OUTPATIENT / Doctor Visit | Acute bronchit
+          +is | 2,500 |                                                  
+      209 +| EXP-004 | 02-20 | INPATIENT / Hospital Stay | Dengue fever |
+          + 18,500 |                                                     
+      210 +| EXP-005 | 03-05 | OUTPATIENT / Physiotherapy | Lower back pa
+          +in | 1,500 |                                                  
+      211 +| EXP-006 | 03-19 | OUTPATIENT / Physiotherapy | Lower back pa
+          +in | 1,500 |                                                  
+      212 +| EXP-007 | 04-02 | OUTPATIENT / Physiotherapy | Lower back pa
+          +in | 1,500 |                                                  
+      213 +| EXP-008 | 04-03 | DENTAL / Cleaning | Dental plaque | 1,200 
+          +|                                                             
+      214 +| EXP-009 | 04-18 | DENTAL / Filling | Dental caries | 4,000 |
+      215 +| EXP-010 | 05-06 | DENTAL / Cleaning | Routine scaling | 250 
+          +|                                                             
+      216 +| EXP-011 | 05-10 | DENTAL / Root Canal | Pulpitis | 7,500 |  
+      217 +| EXP-012 | 06-03 | OUTPATIENT / Acupuncture | Neck pain | 1,5
+          +00 |                                                          
+      218 +| EXP-013 | 06-20 | INPATIENT / Surgery | Cosmetic rhinoplasty
+          + | 45,000 |                                                   
+      219 +| EXP-014 | 07-08 | DENTAL / Cleaning | Dental plaque | 900 | 
+      220 +| EXP-015 | 07-15 | DENTAL / Root Canal | Pulpitis | 7,500 |  
+      221 +| EXP-016 | 08-05 | OPTICAL / Glasses | Myopia | 4,000 |      
+      222 +| EXP-017 | 08-05 | OPTICAL / Eye Exam | Myopia | 800 |       
+      223 +| EXP-018 | 09-10 | INPATIENT / Surgery | Acute appendicitis |
+          + 60,000 |                                                     
+      224 +| EXP-019 | 11-20 | INPATIENT / Hospital Stay | Pneumonia | 25
+          +,000 |                                                        
+      225 +| EXP-020 | 12-16 | OUTPATIENT / Doctor Visit | Influenza | 1,
+          +000 |                                                         
+      226 +                                                              
+      227 +**Expected output (tính tay)**                                
+      228 +                                                              
+      229 +| ID | Not covered | Ded | Copay | Covered | Member | Decision
+          + | Annual còn | Lượt còn | Lý do chính |                      
+      230 +|---|---|---|---|---|---|---|---|---|---|                     
+      231 +| 001 | 1,200 | 0 | 0 | 0 | 1,200 | DENIED | 100,000 | 30 | Wa
+          +iting period OPD 30 ngày, chi trả từ 01-31 |                  
+      232 +| 002 | 0 | 800 | 0 | 0 | 800 | NO_PAYOUT | 100,000 | 29 | Ded
+          +uctible hấp thụ toàn bộ (ded OPD còn 200); rơi đúng ngày 30 | 
+      233 +| 003 | 1,000 | 200 | 260 | 1,040 | 1,460 | PARTIALLY_COVERED 
+          +| 98,960 | 28 | Trần 1,500/lần + deductible còn lại + copay 20
+          +% |                                                           
+      234 +| 004 | 0 | 0 | 0 | 18,500 | 0 | COVERED | 80,460 | null | Chi
+          + trả toàn bộ |                                                
+      235 +| 005 | 0 | 0 | 300 | 1,200 | 300 | PARTIALLY_COVERED | 79,260
+          + | 9 | Copay 20% (HM Physio còn 800) |                        
+      236 +| 006 | 400 | 0 | 300 | 800 | 700 | PARTIALLY_COVERED | 78,460
+          + | 8 | HM Physio chỉ còn 800 |                                
+      237 +| 007 | 1,500 | 0 | 0 | 0 | 1,500 | DENIED | 78,460 | 8 | HM P
+          +hysio đã cạn |                                                
+      238 +| 008 | 0 | 500 | 300 | 400 | 800 | PARTIALLY_COVERED | 78,060
+          + | 1 | Deductible Dental + copay cố định 300 |                
+      239 +| 009 | 1,000 | 0 | 300 | 2,700 | 1,300 | PARTIALLY_COVERED | 
+          +75,360 | null | Trần Filling 3,000 + copay cố định |          
+      240 +| 010 | 0 | 0 | 250 | 0 | 250 | NO_PAYOUT | 75,360 | 0 | 250 t
+          +hấp hơn copay cố định 300 |                                   
+      241 +| 011 | 7,500 | 0 | 0 | 0 | 7,500 | DENIED | 75,360 | null | W
+          +aiting period Root Canal 180 ngày, chi trả từ 06-29 |         
+      242 +| 012 | 1,500 | 0 | 0 | 0 | 1,500 | DENIED | 75,360 | null | A
+          +cupuncture không có trong policy |                            
+      243 +| 013 | 45,000 | 0 | 0 | 0 | 45,000 | DENIED | 75,360 | null |
+          + Exclusion EXC-01 (Cosmetic) |                                
+      244 +| 014 | 900 | 0 | 0 | 0 | 900 | DENIED | 75,360 | 0 | Đã dùng 
+          +hết 2/2 lượt Cleaning |                                       
+      245 +| 015 | 300 | 0 | 300 | 6,900 | 600 | PARTIALLY_COVERED | 68,4
+          +60 | null | HM Dental chỉ còn 6,900 (tầng benefit) |          
+      246 +| 016 | 1,600 | 0 | 400 | 2,000 | 2,000 | PARTIALLY_COVERED | 
+          +66,460 | 0 | Quỹ chung Dental & Optical chỉ còn 2,000 |       
+      247 +| 017 | 800 | 0 | 0 | 0 | 800 | DENIED | 66,460 | 1 | Quỹ chun
+          +g đã cạn (Optical vẫn còn 6,000 và 1 lượt) |                  
+      248 +| 018 | 10,000 | 0 | 0 | 50,000 | 10,000 | PARTIALLY_COVERED |
+          + 16,460 | null | Trần Surgery 50,000/lần |                    
+      249 +| 019 | 8,540 | 0 | 0 | 16,460 | 8,540 | PARTIALLY_COVERED | 0
+          + | null | Annual limit tổng chỉ còn 16,460 |                  
+      250 +| 020 | 1,000 | 0 | 0 | 0 | 1,000 | DENIED | 0 | 28 | Annual l
+          +imit tổng đã cạn (OPD vẫn còn 16,960) |                       
+      251 +                                                              
+      252 +Mọi hàng thỏa bất biến ở mục 5. Tổng covered cả năm = 100,000 
+          += annual limit.                                               
+      253 +                                                              
+      254 +**Chú ý:**                                                    
+      255 +- EXP-011 và EXP-015: cùng ca Root Canal, bị từ chối tháng 5 (
+          +waiting period), được trả tháng 7.                            
+      256 +- EXP-016 và EXP-017: cùng ngày, thứ tự theo ID quyết định kết
+          + quả (nếu Eye Exam xử lý trước sẽ được trả 720, Glasses chỉ cò
+          +n 1,280).                                                     
+      257 +- EXP-003 là expense mẫu trong đề, nhưng kết quả khác vì polic
+          +y có trần và deductible. Output mẫu của đề chỉ minh họa định d
+          +ạng → ghi rõ trong README.                                    
+      258 +                                                              
+      259 +**Summary cuối năm (tính tay)**                               
+      260 +                                                              
+      261 +| Tầng | Hạn mức | Đã dùng | `remaining` | `available` | Ghi c
+          +hú |                                                          
+      262 +|---|---|---|---|---|---|                                     
+      263 +| Policy (annual) | 100,000 | 100,000 | 0 | 0 | |             
+      264 +| Group DENTAL_OPTICAL | 12,000 | 12,000 | 0 | 0 | |          
+      265 +| OUTPATIENT | 20,000 | 3,040 | 16,960 | 0 | Deductible 1,000/
+          +1,000 đã dùng |                                               
+      266 +| · Doctor Visit | — | — | — | — | Lượt: 28/30 còn |          
+      267 +| · Physiotherapy | 2,000 | 2,000 | 0 | 0 | Lượt: 8/10 còn |  
+      268 +| · Lab Test | — | 0 | — | — | Chưa dùng |                    
+      269 +| INPATIENT | 90,000 | 84,960 | 5,040 | 0 | |                 
+      270 +| DENTAL | 10,000 | 10,000 | 0 | 0 | Deductible 500/500 đã dùn
+          +g · Cleaning 0/2 lượt còn |                                   
+      271 +| OPTICAL | 8,000 | 2,000 | 6,000 | 0 | Glasses 0/1 · Eye Exam
+          + 1/1 lượt còn |                                               
+      272 +                                                              
+      273 +**Bảng phủ kịch bản**                                         
+      274 +                                                              
+      275 +| Kịch bản | Expense |                                        
+      276  |---|---|
+      193 -| Outpatient | Copay %, deductible, `NO_PAYOUT` do deductible,
+          - per-visit cap, hết hạn mức sub-benefit (Physio) |            
+      194 -| Inpatient | `COVERED` trọn vẹn, claim lớn làm cạn annual lim
+          -it tổng |                                                     
+      195 -| Dental | Copay cố định, `NO_PAYOUT` do copay cố định, waitin
+          -g period ghi đè (Root Canal), hết lượt khám (Cleaning), exclus
+          -ion (whitening) |                                             
+      196 -| Optical | Hết quỹ chung Dental + Optical |                  
+      277 +| Chi trả trọn vẹn | 004 |                                    
+      278 +| Chi trả một phần do copay (% / cố định) | 005 / 008, 009 |  
+      279 +| DENIED — waiting period (tầng benefit / ghi đè ở sub-benefit
+          +) | 001 / 011 |                                               
+      280 +| DENIED — exclusion | 013 |                                  
+      281 +| DENIED — hết hạn mức (sub-benefit / quỹ chung / annual) | 00
+          +7 / 017 / 020 |                                               
+      282 +| Chi trả một phần — hạn mức còn lại < chi phí (sub / benefit 
+          +/ quỹ chung / annual) | 006 / 015 / 016 / 019 |               
+      283 +| Per-visit cap | 003, 009, 018 |                             
+      284 +| Deductible (trả hết / trả một phần) | 002 / 003, 008 |      
+      285 +| NO_PAYOUT (do deductible / do copay cố định) | 002 / 010 |  
+      286 +| Hết lượt khám · Sub-benefit không tồn tại | 014 · 012 |     
+      287 +| Rơi đúng ranh giới waiting period · Cùng ngày | 002 · 016–01
+          +7 |                                                           
+      288 +| Nhiều expense cùng tiêu hao một hạn mức | 002–003 (deductibl
+          +e), 005–007 (Physio), 008–017 (quỹ chung), toàn bộ (annual) | 
+      289  
+      198 -## 7. Giả định & ngoài phạm vi                                
+      290 +**Không có trong 20 expense → phủ bằng unit test:** expense ng
+          +oài thời hạn policy, benefit_type không tồn tại, làm tròn số l
+          +ẻ satang, input không theo thứ tự ngày.                       
+      291  
+      292 +## 8. Giả định & ngoài phạm vi                                
+      293 +                                                              
+      294  1. Lượt khám chỉ bị trừ khi decision khác `DENIED` (`NO_PAYOUT
+           ` vẫn bị trừ lượt).
+      201 -2. Exclusion, `DENIED` và phần vượt trần không tiêu hao hạn mứ
+          -c, deductible hay lượt khám.                                  
+      202 -3. Waiting period tính từ `effective_date` của policy.        
+      295 +2. Expense `DENIED` và phần vượt trần không tiêu hao hạn mức, 
+          +deductible hay lượt khám.                                     
+      296 +3. Waiting period tính từ `effective_date` của policy (D16).  
+      297  4. **Không miễn waiting period cho tai nạn.** Thực tế thường m
+           iễn; muốn hỗ trợ cần thêm field `is_accident` vào expense.
+      298  5. So khớp keyword cho exclusion có thể bắt nhầm ("Non-cosmeti
+           c scar revision") hoặc bỏ sót ("Rhinoplasty").
+      299  6. Sub-benefit không có trong policy → `DENIED` với lý do "Not
+            covered under this policy" (khác với "Excluded").
+      300 +7. Copay tính trước khi áp hạn mức (bước 4 trước bước 5): khi 
+          +hạn mức cắt bớt, copay giữ nguyên và phần bị cắt vào `not_cove
+          +red_amount`.                                                  
+      301  
+      207 -## 8. Câu hỏi còn mở                                          
+      302 +## 9. Câu hỏi còn mở                                          
+      303  
+      304  - [x] Ngôn ngữ → JavaScript (D10)
+      305  - [x] Nhiều expense cùng ngày → theo `date`, rồi `expense_id` 
+           (D11)
+      211 -- [ ] Thiết kế 20 expense phủ đủ kịch bản                     
+      306  - [x] Làm tròn → satang nội bộ, chỉ làm tròn copay half-up (D1
+           2, D13)
+      307  - [x] Test framework → `node:test` (D14)
+      308 +- [x] Thiết kế 20 expense phủ đủ kịch bản (mục 7)             
+      309 +- [ ] Kiến trúc module & unit test                            
+      310 +- [ ] Ước lượng timeline                                      
+
+⏺ Mình đã cập nhật DESIGN_NOTES.md với nội dung vừa duyệt:
+  - D15–D20: 5 chỗ sửa ở Phần 1, cộng thêm quy ước DENIED thì not_covered_amount
+    bằng toàn bộ số tiền.
+  - Policy: Inpatient 90k, Physio 2k.
+  - Mục 7: bộ 20 expense kèm expected output, summary cuối năm tính tay và bảng
+    phủ kịch bản.
+  - Giả định 7 (mới): copay được tính trước khi áp hạn mức. Khi hạn mức cắt bớt
+    số tiền, copay giữ nguyên, còn phần bị cắt vào not_covered_amount.
+
+  Tiếp theo là phần cuối của thiết kế: kiến trúc module, unit test và timeline.
+
+  Kiến trúc module
+
+  src/
+    index.js         # public API: export calculate, ValidationError
+    money.js         # toSatang, toBaht, percentOf (half-up)
+    policy.js        # validate policy/expense; resolveCoverage → luật đã kế
+  thừa cho 1 expense
+    ledger.js        # trạng thái: hạn mức đã dùng theo 4 tầng, deductible, lượt
+  khám
+    eligibility.js   # bước 1: kiểm tra theo thứ tự D17, trả về lý do đầu tiên
+  bị trượt hoặc null
+    calculator.js    # calculate(): validate → sort → mỗi expense: bước 1 → 2–5
+  → ghi vào ledger
+    summary.js       # summary cuối kỳ: remaining + available (D19)
+  cli.js             # node cli.js data/policy.json data/expenses.json →
+  output/results.json
+  data/              # policy.json, expenses.json, expected_output.json
+  test/              # *.test.js
+
+  Mỗi module chỉ làm một việc và test độc lập được. Ví dụ ledger.js không biết
+  gì về copay, còn eligibility.js chỉ đọc ledger chứ không ghi vào.
+
+  Các nguyên tắc chính:
+  - calculate(policy, expenses) là hàm thuần nhìn từ bên ngoài. Hàm không sửa
+    input; ledger được tạo mới trong mỗi lần gọi, nên gọi hai lần với cùng input
+    sẽ ra cùng kết quả.
+  - Tách lỗi dữ liệu khỏi kết quả nghiệp vụ:
+    - Input sai cấu trúc (thiếu field, số tiền âm, ngày sai định dạng) → throw
+      ValidationError, trong đó liệt kê từng lỗi, ví dụ expenses[3].amount must 
+      be a positive number.
+    - Sub-benefit không tồn tại hoặc expense ngoài thời hạn policy → không 
+      throw, mà trả về DENIED kèm lý do. Đây là kết quả nghiệp vụ, không phải
+      lỗi.
+  - Module format: dùng ES Modules ("type": "module"), là chuẩn hiện tại của
+    Node.
+
+  Unit test (21 test)
+
+  Các test logic dùng một policy nhỏ viết ngay trong file test
+  (makePolicy(overrides)), để mỗi test độc lập và không phụ thuộc bộ 20 expense.
+
+  ┌─────────────┬───────────────────────────────────────────────────────────┐
+  │    Nhóm     │                           Test                            │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ money       │ 1. Đổi satang ↔ THB · 2. Làm tròn half-up: 12.25 × 10% →  │
+  │             │ copay 1.23, covered 11.02                                 │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ Chi trả &   │ 3. COVERED khi không có copay và deductible · 4. Copay %  │
+  │ copay       │ → PARTIALLY_COVERED với lý do đúng mẫu · 5. Copay cố định │
+  │             │  lớn hơn phần còn lại → NO_PAYOUT                         │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ Deductible  │ 6. Deductible tiêu hao qua 2 expense (NO_PAYOUT rồi mới   │
+  │ & trần      │ chi trả) · 7. Trần áp trước deductible: 5,000 / trần      │
+  │             │ 3,000 / ded 1,000 / 20% → covered 1,600                   │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │ Waiting &   │ 8. Ranh giới: ngày N−1 bị từ chối, ngày N được trả · 9.   │
+  │ exclusion   │ Waiting period ghi đè ở sub-benefit · 10. Exclusion không │
+  │             │  phân biệt hoa thường và không tiêu hao gì                │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │             │ 11. Hạn mức sub-benefit: bị cắt một phần rồi cạn → DENIED │
+  │ Hạn mức     │  · 12. Quỹ chung bị hai benefit cùng tiêu hao · 13.       │
+  │             │ Annual tổng chặn trong khi benefit vẫn còn tiền · 14. Hết │
+  │             │  lượt khám; expense bị DENIED không trừ lượt              │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │             │ 15. Benefit/sub-benefit không tồn tại, expense ngoài thời │
+  │ Khác        │  hạn policy · 16. Input xáo trộn vẫn ra cùng kết quả;     │
+  │             │ cùng ngày thì xử lý theo ID · 17. Không sửa input · 18.   │
+  │             │ Input sai → ValidationError                               │
+  ├─────────────┼───────────────────────────────────────────────────────────┤
+  │             │ 19. 20 expense khớp expected_output.json (tính tay) · 20. │
+  │ Bộ dữ liệu  │  Hai đẳng thức đúng với mọi kết quả · 21. Summary khớp    │
+  │             │ bảng tính tay                                             │
+  └─────────────┴───────────────────────────────────────────────────────────┘
+
+  Đối chiếu với yêu cầu tối thiểu của đề:
+
+  ┌─────────────────────────────────────────┬────────────┐
+  │                 Yêu cầu                 │    Test    │
+  ├─────────────────────────────────────────┼────────────┤
+  │ Normal coverage                         │ 3          │
+  ├─────────────────────────────────────────┼────────────┤
+  │ Copay                                   │ 4, 5       │
+  ├─────────────────────────────────────────┼────────────┤
+  │ Limit exhaustion                        │ 11, 13, 14 │
+  ├─────────────────────────────────────────┼────────────┤
+  │ Waiting period                          │ 8, 9       │
+  ├─────────────────────────────────────────┼────────────┤
+  │ Nhiều expense tiêu hao cùng một hạn mức │ 6, 11, 12  │
+  └─────────────────────────────────────────┴────────────┘
+
+  Kết quả test được lưu ra test-results.txt bằng node --test để nộp kèm.
+
+  Timeline (phần hiện thực)
+
+  ┌────────────────────────────────────────────────────┬────────────┐
+  │                      Hạng mục                      │ Ước lượng  │
+  ├────────────────────────────────────────────────────┼────────────┤
+  │ Phân tích & thiết kế                               │ ✅ đã xong │
+  ├────────────────────────────────────────────────────┼────────────┤
+  │ Setup, money, policy, ledger                       │ 0.5h       │
+  ├────────────────────────────────────────────────────┼────────────┤
+  │ eligibility, calculator, câu lý do, summary        │ 1h         │
+  ├────────────────────────────────────────────────────┼────────────┤
+  │ File dữ liệu (policy, 20 expense, expected output) │ 0.5h       │
+  ├────────────────────────────────────────────────────┼────────────┤
+  │ Unit test và sửa lỗi                               │ 1h         │
+  ├────────────────────────────────────────────────────┼────────────┤
+  │ README, test results, push GitHub                  │ 0.5h       │
+  ├────────────────────────────────────────────────────┼────────────┤
+  │ Tổng                                               │ ~3.5h      │
+  └────────────────────────────────────────────────────┴────────────┘
+
+  ---
+
+  Bạn duyệt phần kiến trúc, bộ test và timeline này không? Nếu duyệt, bước tiếp
+  theo trong quy trình brainstorming là viết thành một spec chính thức, tự rà
+  soát, rồi gửi bạn đọc lại trước khi lập kế hoạch triển khai.
+
+❯ OK hãy viết spec                                                              
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(docs/superpowers/specs/2026-09-11-policy-benefits-calculator-design.md)
+  ⎿  Wrote 679 lines to
+     docs/superpowers/specs/2026-09-11-policy-benefits-calculator-design.md
+       1 # Policy Benefits Calculator — Design Spec
+       2 
+       3 - **Date:** 2026-09-11
+       4 - **Source problem:** `AI_Engineering_Challenges/AI_Challenge_06
+         .md`
+       6 - **Supersedes:** `DESIGN_NOTES.md` (working notes, Vietnamese)
+       7 
+       8 ---
+       9 
+      10 ## 1. Overview
+     … +887 lines (ctrl+o to expand)
+
+⏺ Update(docs/superpowers/specs/2026-09-11-policy-benefits-calculator-design.md)
+  ⎿  Added 2 lines, removed 2 lines
+      163  | 1b | Benefit exists | `benefit_type` not in policy |
+      164  | 1c | Sub-benefit exists | `sub_benefit` not in that benefit 
+           |
+      165  | 1d | Exclusion | Lower-cased `diagnosis` contains any lower-
+           cased keyword. Exclusions and keywords are checked in policy o
+           rder; the first match is reported |
+      166 -| 1e | Waiting period | `date < effective_date + waiting_perio
+          -d_days` (calendar days). The effective waiting period is the s
+          -ub-benefit's if set, otherwise the benefit's |                
+      166 +| 1e | Waiting period | `date < effective_date + waiting_perio
+          +d_days` (calendar days, computed in UTC). The effective waitin
+          +g period is the sub-benefit's if set, otherwise the benefit's 
+          +|                                                             
+      167  | 1f | Visit limit | `visits_used(sub) ≥ max_visits` |
+      168 -| 1g | Limit exhausted | Any tier has 0 remaining. Tiers check
+          -ed in order: sub-benefit → benefit → limit group → policy; the
+          - first exhausted tier is reported |                           
+      168 +| 1g | Limit exhausted | Any applicable tier (one that has an 
+          +`annual_limit`) has 0 remaining. Tiers checked in order: sub-b
+          +enefit → benefit → limit group → policy; the first exhausted t
+          +ier is reported |                                             
+      169  
+      170  **Step 2 — Per-visit cap.**
+      171  `eligible = min(amount, per_visit_cap)` (no cap → `eligible = 
+           amount`)
+
+⏺ Update(docs/superpowers/specs/2026-09-11-policy-benefits-calculator-design.md)
+  ⎿  Added 1 line, removed 1 line
+      443  
+      444  ### 10.2 `data/expenses.json` — 20 expenses (all 2024)
+      445  
+      446 -Providers are filled in when the file is created.             
+      446 +Each expense also has a `provider` (free-form hospital/clinic 
+          +name). It is informational only and does not affect any calcul
+          +ation, so it is omitted from this table.                      
+      447  
+      448  | ID | Date | Benefit / Sub-benefit | Diagnosis | Amount |
+      449  |---|---|---|---|---|
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Mình đã viết xong spec: 2026-09-11-policy-benefits-calculator-design.md
+  (docs/superpowers/specs/2026-09-11-policy-benefits-calculator-design.md).
+
+  Spec viết bằng tiếng Anh, vì nó sẽ nằm trong repo nộp cho người chấm, cùng
+  ngôn ngữ với đề bài và code. Nếu bạn muốn một bản tiếng Việt để đọc duyệt thì
+  báo mình.
+
+  Những gì spec bổ sung so với DESIGN_NOTES
+
+  Phần lớn nội dung là chép lại những gì đã chốt. Có 4 chỗ mình phải cụ thể hóa
+  thêm để người code không phải đoán, bạn nên đọc kỹ các chỗ này:
+
+  - Mục 3, schema đầy đủ: kiểu dữ liệu, trường nào bắt buộc, giá trị mặc định
+    khi bỏ trống. Ví dụ copay không khai báo thì hiểu là không có copay.
+  - Mục 5, mẫu câu lý do cố định: spec viết sẵn nguyên văn lý do cho cả 20
+    expense. Nhờ vậy test so sánh được chính xác từng câu, chứ không chỉ so số
+    tiền.
+  - Mục 8.2, cấu trúc summary: có thêm phần totals. Tổng số tiền nộp là 186,150,
+    bảo hiểm trả 100,000, thành viên tự trả 86,150. Theo decision: 1 COVERED, 9
+    PARTIALLY_COVERED, 2 NO_PAYOUT, 8 DENIED.
+  - Mục 10.3, quy tắc bắt buộc: expected_output.json phải chép tay từ bảng trong
+    spec, không được sinh ra bằng cách chạy calculator.
+
+  Tự rà soát
+
+  Qua lần rà soát, mình sửa 3 chỗ:
+  - Bước 1g: chỉ xét những tầng có khai báo annual_limit. Tầng không có hạn mức
+    thì không bao giờ bị coi là "đã cạn".
+  - Ngày waiting period: tính theo UTC, để giờ địa phương hay giờ mùa hè không
+    làm lệch ngày.
+  - Trường provider: thay câu còn bỏ ngỏ bằng một định nghĩa rõ ràng: đây là tên
+    bệnh viện/phòng khám, chỉ để tham khảo, không ảnh hưởng đến phép tính.
+
+  Mình đã chạy Node để kiểm tra: 4 mốc waiting period (01-31, 03-01, 03-31,
+  06-29) và các tổng tiền đều khớp với số tính tay. Không còn chỗ trống hay mâu
+  thuẫn nào giữa các mục.
+
+  Chưa commit
+
+  Mình chưa commit spec vì bạn chưa yêu cầu. Repo hiện chưa có commit nào, và
+  AI_Engineering_Challenges/ cùng DESIGN_NOTES.md cũng đang ở trạng thái
+  untracked. Từ giờ spec sẽ là nguồn thông tin chính thức, còn DESIGN_NOTES.md
+  bạn có thể xóa bất cứ lúc nào.
+
+  Bạn đọc lại spec giúp mình và cho biết có muốn chỉnh gì trước khi mình lập kế
+  hoạch triển khai không. Nếu ổn, bạn có muốn mình commit spec trước không?
+
+❯ Hãy lên kế hoạch triển khai                                                   
+
+⏺ Skill(superpowers:writing-plans)
+  ⎿  Successfully loaded skill
+
+⏺ Mình sẽ dùng skill writing-plans để viết kế hoạch triển khai, và trước khi
+  hoàn thiện sẽ chạy thử toàn bộ code trong thư mục scratchpad để đảm bảo cho ra
+  đúng 20 kết quả đã tính tay, tránh việc bạn thực thi một plan có lỗi. 
+  · summarized
+
+  Made 21 scratchpad edits +1579 -1, searched for 1 pattern, listed 1 directory, ran 7 shell commands (ctrl+o to expand)
+
+⏺ Cả 37 test đều pass, và kết quả 20 expense khớp hoàn toàn với expected output
+  chép tay. Giờ mình sẽ sửa CLI để in thông báo lỗi thân thiện hơn thay vì stack
+  trace khi file JSON bị hỏng. · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(docs/superpowers/plans/2026-09-11-policy-benefits-calculator.md)
+  ⎿  Wrote 2182 lines to
+     docs/superpowers/plans/2026-09-11-policy-benefits-calculator.md
+      1 # Policy Benefits Calculator Implementation Plan
+      3 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:su
+        bagent-driven-development (recommended) or superpowers:executing-
+         [ ]`) syntax for tracking.
+      4 
+        (JSON) and a list of medical expenses, processes them chronologic
+        ally, and returns per-expense covered amounts with human-readable
+      6 
+      7 **Architecture:** Small ES modules with one responsibility each: 
+        on), `ledger` (running usage per limit tie
+     … +2779 lines (ctrl+o to expand)
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Mình đã viết xong kế hoạch triển khai:
+  2026-09-11-policy-benefits-calculator.md
+  (docs/superpowers/plans/2026-09-11-policy-benefits-calculator.md). Code trong
+  plan đã chạy thật và cho ra đúng 20 kết quả tính tay, cả 37 test đều pass.
+
+  Plan gồm 8 task, mỗi task theo TDD và kết thúc bằng một commit
+
+  ┌──────┬──────────────────────────────────────────────────────┬───────────┐
+  │ Task │                       Nội dung                       │ Test pass │
+  │      │                                                      │  sau task │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 1    │ package.json + money.js (tính bằng satang, làm tròn  │ 3         │
+  │      │ half-up, định dạng số tiền). Commit kèm spec và plan │           │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 2    │ policy.js: kiểm tra input, liệt kê đủ mọi lỗi; xác   │ 7         │
+  │      │ định quy tắc áp dụng cho từng expense (có kế thừa)   │           │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 3    │ ledger.js: theo dõi hạn mức 4 tầng, deductible, lượt │ 9         │
+  │      │  khám                                                │           │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 4    │ eligibility.js: bước 1, kiểm tra theo đúng thứ tự    │ 18        │
+  │      │ trong spec                                           │           │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 5    │ calculator.js: bước 2–5, decision, câu lý do         │ 33        │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 6    │ summary.js (remaining/available, totals) + public    │ 34        │
+  │      │ API                                                  │           │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 7    │ 20 expense + expected_output.json chép tay từ spec   │ 37        │
+  ├──────┼──────────────────────────────────────────────────────┼───────────┤
+  │ 8    │ CLI, README, output/results.json, test-results.txt;  │ 37        │
+  │      │ push khi bạn đồng ý                                  │           │
+  └──────┴──────────────────────────────────────────────────────┴───────────┘
+
+  Cách mình kiểm chứng
+
+  1. Chạy thử trước khi viết plan. Mình viết toàn bộ code trong scratchpad và
+     chạy đủ 37 test. Code calculator và file expected output được viết độc lập
+     nhau từ spec, và khớp nhau ngay lần chạy đầu tiên.
+  2. Kiểm tra lại chính file plan. Mình tách code ra từ file plan vào một thư
+     mục mới, rồi chạy lại từng giai đoạn:
+     - Số test pass sau từng task đúng như plan ghi.
+     - Code tách ra giống hệt bản đã kiểm chứng.
+     - Output của CLI khớp expected output, và các nhánh báo lỗi của CLI trả
+       đúng exit code.
+
+  Khác với spec (plan có ghi rõ)
+
+  - 37 test thay vì 21: mỗi module có file test riêng. Cả 21 test trong spec vẫn
+    có đủ.
+  - checkEligibility trả về chuỗi lý do thay vì object { code, reason }.
+  - Đơn vị tiền trong câu lý do lấy từ policy.currency. Output với bộ dữ liệu
+    này vẫn y hệt spec.
+  - CLI báo lỗi gọn gàng khi file JSON hỏng, thay vì in stack trace.
+
+  Hiện tại chưa có gì được commit. Task 1 sẽ commit luôn spec và plan.
+  DESIGN_NOTES.md và AI_Engineering_Challenges/ sẽ không được commit trừ khi bạn
+  yêu cầu.
+
+  Bạn muốn thực thi theo cách nào?
+
+  1. Subagent-Driven (khuyến nghị): mỗi task giao cho một subagent mới, và mình
+     review giữa các task.
+  2. Inline: mình làm lần lượt ngay trong phiên này, dừng ở các mốc để bạn kiểm
+     tra.
+
+❯ Inline                                                                        
+
+⏺ Skill(superpowers:executing-plans)
+  ⎿  Successfully loaded skill
+
+⏺ Tôi kiểm tra workspace: repo đang ở nhánh ai-challenge-06 (chưa có commit nên
+  không tạo được worktree riêng), nên sẽ làm việc trực tiếp tại đây. Plan đã rà
+  soát kỹ, code từng được chạy thử nên không có vướng mắc. · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(package.json)  ⎿  Wrote 17 lines to package.json
+       1 {
+       2   "name": "policy-benefits-calculator",
+       3   "version": "1.0.0",
+       4   "description": "Calculates how much of each medical expense an
+          insurance policy covers, with explanations",
+       6   "main": "src/index.js",
+       7   "exports": "./src/index.js",
+       8   "engines": {
+       9     "node": ">=20"
+      10   },
+     … +10 lines (ctrl+o to expand)
+
+⏺ Write(test/money.test.js)
+  ⎿  Wrote 26 lines to test/money.test.js
+       1 import { test } from 'node:test';
+       2 import assert from 'node:assert/strict';
+         c/money.js';
+       4 
+       5 test('converts THB to satang and back without floating-point dri
+       6   assert.equal(toSatang(1234.57), 123457);
+       7   assert.equal(toBaht(123457), 1234.57);
+       8   assert.equal(toSatang(0.1 + 0.2), 30);
+         ;
+      10 });
+     … +20 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(src/money.js)
+  ⎿  Wrote 24 lines to src/money.js
+       1 // All money is handled internally as integer satang (1 THB = 10
+         0 satang)
+       2 // to avoid floating-point drift. Convert only at the input/outp
+       3 
+       4 export function toSatang(thb) {
+       5   return Math.round(thb * 100);
+       6 }
+       8 export function toBaht(satang) {
+       9   return satang / 100;
+      10 }
+     … +16 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(test/helpers.js)
+  ⎿  Wrote 36 lines to test/helpers.js
+       1 // Small builders so each test declares only the policy rules it
+          exercises.
+       2 
+       3 export function makeBenefit(overrides = {}) {
+       4   return {
+       6     waiting_period_days: 0,
+       7     sub_benefits: [{ name: 'Doctor Visit' }],
+       8     ...overrides,
+       9   };
+      10 }
+     … +27 lines (ctrl+o to expand)
+
+⏺ Write(test/policy.test.js)
+  ⎿  Wrote 102 lines to test/policy.test.js
+      1 import { test } from 'node:test';
+      2 import assert from 'node:assert/strict';
+      3 import { validatePolicy, validateExpenses, resolveCoverage, Valid
+        ationError } from '../src/policy.js';
+      4 import { makePolicy, makeBenefit, makeExpense } from './helpers.j
+      5 
+      6 test('accepts a well-formed policy and expenses', () => {
+      7   assert.doesNotThrow(() => validatePolicy(makePolicy()));
+      8   assert.doesNotThrow(() => validateExpenses([makeExpense()]));
+      9 });
+     … +110 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(src/policy.js)
+  ⎿  Wrote 215 lines to src/policy.js
+      1 import { toSatang } from './money.js';
+      2 
+      3 export class ValidationError extends Error {
+      4   constructor(errors) {
+      5     super(`Invalid input:\n  - ${errors.join('\n  - ')}`);
+      6     this.name = 'ValidationError';
+      7     this.errors = errors;
+      8   }
+      9 }
+     … +262 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(test/ledger.test.js)
+  ⎿  Wrote 56 lines to test/ledger.test.js
+       1 import { test } from 'node:test';
+       2 import assert from 'node:assert/strict';
+       3 import { createLedger } from '../src/ledger.js';
+       5 import { makePolicy, makeBenefit, makeExpense } from './helpers.
+         js';
+       6 
+       7 const policy = makePolicy({
+       9   limit_groups: [{ group_id: 'G', name: 'Dental & Optical combin
+         ed', annual_limit: 3000 }],
+      10   benefits: [
+     … +54 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(src/ledger.js)
+  ⎿  Wrote 89 lines to src/ledger.js
+       1 import { toSatang } from './money.js';
+       3 const optionalSatang = (thb) => (thb != null ? toSatang(thb) : n
+         ull);
+         Type, subName]);
+       5 
+         uctible used
+       7 // per benefit and visits per sub-benefit. All amounts in satang
+       8 class Ledger {
+       9   constructor(policy) {
+         annual_limit), used: 0 };
+     … +90 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(test/eligibility.test.js)
+  ⎿  Wrote 107 lines to test/eligibility.test.js
+       1 import { test } from 'node:test';
+       3 import { checkEligibility, addDays } from '../src/eligibility.js
+         ';
+       4 import { resolveCoverage } from '../src/policy.js';
+       6 import { makePolicy, makeBenefit, makeExpense } from './helpers.
+         js';
+       8 function check(policy, expenseOverrides, ledger = createLedger(p
+         olicy)) {
+       9   const expense = makeExpense(expenseOverrides);
+         y, expense), ledger);
+     … +122 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(src/eligibility.js)
+  ⎿  Wrote 49 lines to src/eligibility.js
+      1 // Step 1: checks that deny an expense outright. Runs in a fixed 
+        order and
+      2 // returns the reason for the first failed check, or null if elig
+        ible.
+      3 // Reads the ledger but never writes to it.
+      5 export function addDays(isoDate, days) {
+      6   const date = new Date(`${isoDate}T00:00:00Z`);
+      7   date.setUTCDate(date.getUTCDate() + days);
+      8   return date.toISOString().slice(0, 10);
+      9 }
+     … +57 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(test/calculator.test.js)
+  ⎿  Wrote 276 lines to test/calculator.test.js
+       1 import { test } from 'node:test';
+       3 import { calculate } from '../src/calculator.js';
+       4 import { makePolicy, makeBenefit, makeExpense } from './helpers.
+       5 
+       6 const pick = (result, ...keys) => Object.fromEntries(keys.map((k
+       7 const AMOUNTS = ['not_covered_amount', 'deductible_applied', 'co
+         pay_amount', 'covered_amount', 'member_pays', 'decision'];
+       9 test('normal coverage: no copay or deductible pays the full amou
+         nt', () => {
+         unt: 1000 })]);
+     … +338 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(src/calculator.js)
+  ⎿  Wrote 114 lines to src/calculator.js
+       1 import { toSatang, toBaht, percentOf, formatAmount } from './mon
+         ey.js';
+         m './policy.js';
+       3 import { createLedger } from './ledger.js';
+       4 import { checkEligibility } from './eligibility.js';
+       6 // Chronological order; same-day expenses by ID so results never
+          depend on input order.
+       7 export function compareExpenses(a, b) {
+       9   if (a.expense_id === b.expense_id) return 0;
+      10   return a.expense_id < b.expense_id ? -1 : 1;
+     … +131 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(test/summary.test.js)
+  ⎿  Wrote 45 lines to test/summary.test.js
+       1 import { test } from 'node:test';
+       2 import assert from 'node:assert/strict';
+       4 import { makePolicy, makeBenefit, makeExpense } from './helpers.
+         js';
+       5 
+          still available', () => {
+       7   const policy = makePolicy({
+       8     annual_limit: 1000,
+         bined', annual_limit: 5000 }],
+      10     benefits: [
+     … +47 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(src/summary.js)
+  ⎿  Wrote 78 lines to src/summary.js
+       1 import { toSatang, toBaht } from './money.js';
+       3 const DECISIONS = ['COVERED', 'PARTIALLY_COVERED', 'NO_PAYOUT', 
+         'DENIED'];
+       5 const remainingOf = (tier) => (tier.limit === null ? null : tier
+         .limit - tier.used);
+         satang));
+       7 // What can still be paid: the tier's own balance, capped by eve
+       8 const availableOf = (own, parentAvailable) => (own === null ? pa
+         rentAvailable : Math.min(own, parentAvailable));
+      10 function sumSatang(results, field) {
+     … +80 lines (ctrl+o to expand)
+
+⏺ Write(src/index.js)
+  ⎿  Wrote 2 lines to src/index.js
+      1 export { calculate } from './calculator.js';
+      2 export { ValidationError } from './policy.js';
+⏺ Update(src/calculator.js)
+  ⎿  Added 1 line
+      2  import { validatePolicy, validateExpenses, resolveCoverage } fro
+         m './policy.js';
+      3  import { createLedger } from './ledger.js';
+      4  import { checkEligibility } from './eligibility.js';
+      5 +import { buildSummary } from './summary.js';                    
+      6  
+      7  // Chronological order; same-day expenses by ID so results never
+          depend on input order.
+      8  export function compareExpenses(a, b) {
+
+⏺ Update(src/calculator.js)
+  ⎿  Added 1 line, removed 1 line
+      111    validateExpenses(expenses);
+      112    const ledger = createLedger(policy);
+      113    const results = [...expenses].sort(compareExpenses).map((exp
+           ense) => processExpense(policy, expense, ledger));
+      114 -  return { results };                                         
+      114 +  return { results, summary: buildSummary(policy, ledger, resu
+          +lts) };                                                       
+      115  }
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(test/dataset.test.js)
+  ⎿  Wrote 34 lines to test/dataset.test.js
+       1 import { test } from 'node:test';
+       2 import assert from 'node:assert/strict';
+       3 import { readFileSync } from 'node:fs';
+       5 import { toSatang } from '../src/money.js';
+       6 
+       7 const load = (file) => JSON.parse(readFileSync(new URL(`../data/
+         ${file}`, import.meta.url), 'utf8'));
+       9 const expenses = load('expenses.json');
+      10 // Written by hand from the spec (section 10.3–10.4), never gene
+         rated by the calculator.
+     … +33 lines (ctrl+o to expand)
+
+⏺ Mình sẽ chạy test để xác nhận nó fail do thiếu dữ liệu, sau đó chép 3 file dữ
+  liệu viết tay từ scratchpad (đã xác minh khớp từng byte với plan) vào. 
+  · summarized
+
+  Ran 2 shell commands (ctrl+o to expand)
+
+⏺ Write(cli.js)
+  ⎿  Wrote 31 lines to cli.js
+       1 #!/usr/bin/env node
+       2 import { readFileSync, writeFileSync, mkdirSync } from 'node:fs'
+       3 import { dirname } from 'node:path';
+       4 import { calculate, ValidationError } from './src/index.js';
+       5 
+         );
+       7 if (!policyPath || !expensesPath) {
+       8   console.error('Usage: node cli.js <policy.json> <expenses.json
+       9   process.exit(2);
+      10 }
+     … +24 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Write(README.md)
+  ⎿  Wrote 137 lines to README.md
+      1 # Policy Benefits Calculator
+      3 Calculates how much of each medical expense an insurance policy c
+        overs — applying annual limits, per-visit caps, visit limits, ded
+        uctibles, copays, waiting periods and exclusions — and explains e
+      4 
+      5 Built for AI Challenge 06. Full design: [`docs/superpowers/specs/
+        s/specs/2026-09-11-policy-benefits-calculator-design.md).
+      6 
+      7 ## Quick start
+      9 Requires Node.js 20 or later. No dependencies to install.
+     … +198 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Skill(superpowers:finishing-a-development-branch)
+  ⎿  Successfully loaded skill
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Mình dùng skill finishing-a-development-branch để hoàn tất nhánh. Kết quả kiểm
+  tra:
+
+  - Test: 37/37 pass trên đúng cây code sắp tích hợp.
+  - Repo: repo thường, không có worktree nào cần dọn.
+  - Chưa có nhánh main: git status ghi main là nhánh chính, nhưng thực tế nó
+    chưa tồn tại cả ở local lẫn trên remote. ai-challenge-06 là nhánh duy nhất.
+  - Chưa có remote: repo chưa có remote nào.
+
+  Vì vậy hai lựa chọn đầu cần thêm một bước. Lựa chọn 1 phải tạo nhánh main từ
+  nhánh hiện tại. Lựa chọn 2 cần bạn gửi URL repository GitHub để mình thêm
+  remote.
+
+  Implementation complete. What would you like to do?
+
+  1. Merge back to main locally
+  2. Push and create a Pull Request
+  3. Keep the branch as-is (I'll handle it later)
+
+  Which option?
+
+❯ Bây giờ hãy vẽ cho tôi 2 sơ đờ mermaid, để trong folder /docs/diagrams        
+                                                                                
+  - 1 sơ đồ tổng quan cách vận hành, cách tính của engine.                      
+  - 1 sơ đồ có input expense cụ thể.                                            
+
+⏺ Mình sẽ tạo 2 file Markdown trong docs/diagrams/. GitHub hiển thị sẵn khối
+  ```mermaid, nên người chấm mở repo là thấy sơ đồ ngay. Nội dung viết bằng
+  tiếng Anh để thống nhất với README và spec.
+
+  - Sơ đồ tổng quan: toàn bộ luồng chạy của engine, gồm kiểm tra input, sắp xếp,
+    vòng lặp qua từng expense (5 bước và ledger), rồi đến summary.
+  - Sơ đồ ví dụ: chọn EXP-003 (2,500 THB, Acute bronchitis). Đây chính là
+    expense mẫu trong đề, và nó đi qua đủ cả per-visit cap, deductible và copay.
+
+⏺ Write(docs/diagrams/engine-overview.md)
+  ⎿  Wrote 56 lines to docs/diagrams/engine-overview.md
+       1 # Engine overview
+       3 How `calculate(policy, expenses)` turns a policy and a list of e
+         tes are defined in the [design spec](../superpowers/specs/2026-0
+         h real numbers is in [expense-walkthrough.md](expense-walkthroug
+       4 
+       6 flowchart TD
+         }
+         blem"]
+         d"]
+         ier · deductible used · visits used"]
+     … +72 lines (ctrl+o to expand)
+
+⏺ Write(docs/diagrams/expense-walkthrough.md)
+  ⎿  Wrote 66 lines to docs/diagrams/expense-walkthrough.md
+       1 # Expense walkthrough — EXP-003
+       3 One expense from [`data/expenses.json`](../../data/expenses.json
+         ) traced through the engine with real numbers. EXP-003 is the sa
+         mple expense from the problem statement, and it exercises the pe
+          general flow is in [engine-overview.md](engine-overview.md).
+       4 
+       6 
+       7 ```json
+       8 {
+      10   "date": "2024-02-12",
+     … +90 lines (ctrl+o to expand)
+
+  Ran 1 shell command (ctrl+o to expand)
+  ⎿  Error: This tab shows a local file, not a web page; page tools can't act on
+     it here. Open web pages in a new tab (`tabs_create`, then `navigate`).
+
+⏺ Khung xem trước hiện chỉ hiển thị ảnh tĩnh vì file local không chạy JavaScript
+  được. Mình sẽ phục vụ trang qua một HTTP server tạm để mermaid render đúng. 
+  · summarized
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Write(.claude/launch.json)
+  ⎿  Wrote 11 lines to .claude/launch.json
+       1 {
+       2   "version": "0.0.1",
+       4     {
+       5       "name": "diagram-preview",
+       6       "runtimeExecutable": "python3",
+         , "/private/tmp/claude-501/-Users-vuminhluan-Documents-MyProject
+         s-ai-challenge-06/11ad3c9f-35cf-4b87-ab21-9b222ad46b9d/scratchpa
+         d"],
+       9     }
+      10   ]
+     … +3 lines (ctrl+o to expand)
+⏺ Sơ đồ 1 đang quá dài do 6 ô hình thoi ở bước 1 mỗi cái kéo riêng nhánh "no" về
+  DENIED. Mình sẽ gộp chúng thành một ô liệt kê 6 điều kiện kèm nút "All pass?"
+  để sơ đồ gọn hơn mà giữ nguyên nội dung. · summarized
+
+⏺ Update(docs/diagrams/engine-overview.md)
+  ⎿  Added 11 lines, removed 15 lines
+      11      LEDGER --> NEXT{"Next expense?"}
+      12      NEXT -->|yes| RESOLVE["Resolve coverage<br/>find benefit + 
+          sub-benefit,<br/>inherit copay and waiting period"]
+      13  
+      14 -    subgraph STEP1["Step 1 · Eligibility — checked in this orde
+         -r, first failure wins"]                                        
+      15 -        C1{"Date inside the<br/>policy period?"}               
+      16 -        C2{"Benefit and sub-benefit<br/>exist in the policy?"} 
+      17 -        C3{"Diagnosis free of<br/>exclusion keywords?"}        
+      18 -        C4{"Waiting period over?"}                             
+      19 -        C5{"Visits left?"}                                     
+      20 -        C6{"Every limit tier<br/>still above 0?"}              
+      21 -        C1 -->|yes| C2 -->|yes| C3 -->|yes| C4 -->|yes| C5 -->|
+         -yes| C6                                                        
+      14 +    RESOLVE --> S1["<b>Step 1 · Eligibility</b> — checked in th
+         +is order, first failure wins<br/>1. date inside the policy peri
+         +od<br/>2. benefit and sub-benefit exist in the policy<br/>3. di
+         +agnosis matches no exclusion keyword<br/>4. waiting period is o
+         +ver<br/>5. visits left for the sub-benefit<br/>6. every limit t
+         +ier still above 0"]                                            
+      15 +    S1 --> PASS{"All pass?"}                                   
+      16 +    PASS -->|no| DENIED["DENIED<br/>reason names the failed che
+         +ck<br/>consumes nothing"]                                      
+      17 +                                                               
+      18 +    subgraph PAYOUT["Steps 2–5 · Compute the payout (integer sa
+         +tang)"]                                                        
+      19 +        S2["<b>Step 2 · Per-visit cap</b><br/>eligible = min(am
+         +ount, cap)<br/>excess is never covered"]                       
+      20 +        S3["<b>Step 3 · Deductible</b> (per benefit, per year)<
+         +br/>applied = min(eligible, deductible left)"]                 
+      21 +        S4["<b>Step 4 · Copay</b><br/>PERCENTAGE: % of the rest
+         +, rounded half-up<br/>FIXED: min(value, rest)"]                
+      22 +        S5["<b>Step 5 · Limit caps</b><br/>covered = min(rest, 
+         +remaining at<br/>sub-benefit · benefit · limit group · policy)"
+         +]                                                              
+      23 +        S2 --> S3 --> S4 --> S5                                
+      24      end
+      25  
+      24 -    RESOLVE --> C1                                             
+      25 -    C1 & C2 & C3 & C4 & C5 & C6 -->|no| DENIED["DENIED<br/>cons
+         -umes nothing"]                                                 
+      26 -                                                               
+      27 -    C6 -->|yes| S2["Step 2 · Per-visit cap<br/>eligible = min(a
+         -mount, cap)<br/>excess is never covered"]                      
+      28 -    S2 --> S3["Step 3 · Deductible (per benefit, per year)<br/>
+         -applied = min(eligible, deductible left)"]                     
+      29 -    S3 --> S4["Step 4 · Copay<br/>PERCENTAGE: % of the rest, ro
+         -unded half-up<br/>FIXED: min(value, rest)"]                    
+      30 -    S4 --> S5["Step 5 · Limit caps<br/>covered = min(rest, rema
+         -ining at<br/>sub-benefit · benefit · limit group · policy)"]   
+      26 +    PASS -->|yes| S2                                           
+      27      S5 --> RECORD["Record in ledger<br/>+covered on every tier 
+          · +deductible applied · +1 visit"]
+      28      RECORD --> DECIDE{"covered is…"}
+      29      DECIDE -->|"= amount"| COVERED["COVERED"]
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Bố cục đã gọn hơn, nhưng mermaid vẫn tự ngắt dòng ở ~200px khiến ô hẹp và cao.
+  Mình sẽ thử tăng độ rộng ngắt dòng bằng config trong frontmatter (được GitHub
+  hỗ trợ). · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Sơ đồ 1 có luồng chính từ kiểm tra input, sắp xếp, ledger, qua vòng lặp bước 1
+  đến khối bước 2–5. Giờ mình xem tiếp nửa dưới sơ đồ. · summarized
+⏺ Phần dưới sơ đồ 1 cho thấy rõ luồng: bước 3–5 ghi vào ledger, rẽ thành 3 nhánh
+  quyết định (DENIED tách riêng bên trái), rồi hội tụ về "Result". Giờ tôi sẽ
+  xem tiếp sơ đồ 2. · summarized
+
+⏺ Sơ đồ 2 đã hiển thị đúng luồng từ đầu vào đến kết quả. Giờ mình sẽ thêm config
+  độ rộng ngắt dòng trực tiếp vào hai file gốc để GitHub hiển thị đồng nhất với
+  trang xem trước. · summarized
+
+⏺ Update(docs/diagrams/engine-overview.md)
+  ⎿  Added 5 lines
+       3  How `calculate(policy, expenses)` turns a policy and a list of 
+          expenses into per-expense results and a summary. Rules and temp
+          lates are defined in the [design spec](../superpowers/specs/202
+          6-09-11-policy-benefits-calculator-design.md); a worked example
+           with real numbers is in [expense-walkthrough.md](expense-walkt
+          hrough.md).
+       4  
+       5  ```mermaid
+       6 +---                                                            
+       7 +config:                                                        
+       8 +  flowchart:                                                   
+       9 +    wrappingWidth: 400                                         
+      10 +---                                                            
+      11  flowchart TD
+      12      IN["policy.json + expenses.json"] --> VAL{"Valid structure?
+          "}
+      13      VAL -->|no| ERR["Throw ValidationError<br/>listing every pr
+          oblem"]
+
+⏺ Update(docs/diagrams/expense-walkthrough.md)
+  ⎿  Added 5 lines
+      17  ```
+      18  
+      19  ```mermaid
+      20 +---                                                            
+      21 +config:                                                        
+      22 +  flowchart:                                                   
+      23 +    wrappingWidth: 400                                         
+      24 +---                                                            
+      25  flowchart TD
+      26      EXP["EXP-003 · 2024-02-12<br/>OUTPATIENT / Doctor Visit · A
+          cute bronchitis<br/><b>amount 2,500 THB</b>"]
+      27      BEFORE["Ledger before this expense<br/>EXP-001 was denied: 
+          used nothing<br/>EXP-002 used 800 of the 1,000 OUTPATIENT deduc
+          tible<br/>→ deductible left 200 · Doctor Visit visits left 29 o
+          f 30<br/>→ OUTPATIENT 20,000 left · Policy 100,000 left"]
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Cả hai file đều render không lỗi và config từ frontmatter đã áp dụng đúng. Giờ
+  mình tắt server tạm và xóa file .claude/launch.json đã tạo để xem trước. 
+  · summarized
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Mình đã vẽ xong 2 sơ đồ và đặt trong docs/diagrams/. Cả hai đều render không
+  lỗi với mermaid 11.
+
+  - engine-overview.md (docs/diagrams/engine-overview.md): cách engine vận hành.
+    - Luồng chung: kiểm tra input → sắp xếp theo ngày rồi theo ID → tạo ledger
+      rỗng → lặp qua từng expense.
+    - Mỗi expense: kiểm tra 6 điều kiện theo thứ tự. Không đạt thì DENIED và
+      không tiêu hao gì; đạt thì tính tiền qua bước 2–5.
+    - Kết thúc mỗi vòng: ghi vào ledger, rồi chia ra COVERED, PARTIALLY_COVERED
+      hoặc NO_PAYOUT.
+    - Cuối cùng: dựng summary.
+    - Chú thích dưới sơ đồ: ledger là trạng thái duy nhất giữa các expense; vì
+      sao kiểm tra "hạn mức đã cạn" nằm ở bước 1; bảng 4 tầng hạn mức; hai đẳng
+      thức tiền luôn đúng.
+  - expense-walkthrough.md (docs/diagrams/expense-walkthrough.md): ví dụ với 
+    EXP-003 (2,500 THB, Acute bronchitis), chính là expense mẫu trong đề.
+    - Sơ đồ bắt đầu từ trạng thái ledger trước đó: EXP-001 bị từ chối, EXP-002
+      đã dùng 800 deductible nên còn 200.
+    - Sau đó đi qua từng bước với số thật: trần 1,500 → deductible 200 → copay
+      260 → covered 1,040, kết quả PARTIALLY_COVERED.
+    - Kèm theo là JSON input/output, phần kiểm tra hai đẳng thức, và lời giải
+      thích vì sao kết quả khác output mẫu của đề.
+    - Mình đã đối chiếu: JSON input/output trong file khớp chính xác với
+      data/expenses.json và output/results.json.
+
+  Để sơ đồ dễ đọc hơn, mình làm thêm hai việc:
+  - Gộp bước 1 thành một ô liệt kê 6 điều kiện. Bản đầu có 6 hình thoi nối liền
+    nhau nên sơ đồ dài và rối.
+  - Tăng độ rộng ngắt dòng lên 400px bằng config ở đầu mỗi khối mermaid. GitHub
+    đọc được config này.
+
+  Nội dung viết bằng tiếng Anh để thống nhất với README và spec.
+
+  Mình có tạo tạm .claude/launch.json và một server để xem trước sơ đồ. Cả hai
+  đã được xóa.
+
+  Hai file này chưa được commit. Mình có thể commit chúng, và nếu bạn muốn thì
+  thêm link tới sơ đồ vào README. Bạn cũng chưa trả lời câu hỏi lần trước về
+  cách xử lý nhánh ai-challenge-06: merge vào main, push và tạo PR, hay giữ
+  nguyên.
+
+❯ Tôi có tạo 1 github repo: https://github.com/vuminhluan/ai-challenge06.git    
+                                                                                
+  Hãy push lên master.                                                          
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Remote đang trống nên push sẽ không xung đột. Trước khi push, mình sẽ commit 2
+  file sơ đồ vừa vẽ, còn DESIGN_NOTES.md và AI_Engineering_Challenges/ vẫn giữ
+  ngoài commit như đã thống nhất. · summarized
+
+  Pushed to master, ran 2 shell commands (ctrl+o to expand)
+
+⏺ Đã push xong lên nhánh master của vuminhluan/ai-challenge06
+  (https://github.com/vuminhluan/ai-challenge06). Mình đã kiểm tra: master trên
+  GitHub trỏ đúng commit a04ae3b, trùng với commit mới nhất ở máy bạn.
+
+  - 9 commit đã lên GitHub: 8 commit từ plan triển khai, cộng 1 commit mới cho 2
+    sơ đồ trong docs/diagrams/. Mình commit 2 sơ đồ trước khi push vì chúng
+    thuộc bài nộp. 37/37 test pass ngay trước khi push.
+  - Nhánh ở máy: vẫn tên ai-challenge-06, nay đã theo dõi origin/master. Sau này
+    bạn chỉ cần git push là lên đúng master.
+  - Nội dung trên GitHub: code trong src/, CLI, 37 test, dữ liệu (policy, 20
+    expense, expected output tính tay), output/results.json, test-results.txt,
+    README, spec, plan và 2 sơ đồ. Đủ các mục đề bài yêu cầu nộp.
+  - Chưa đưa lên GitHub:
+    - DESIGN_NOTES.md: ghi chú tạm bằng tiếng Việt, đã được spec thay thế.
+    - AI_Engineering_Challenges/: file đề bài gốc.
+
+    Nếu bạn muốn đưa đề bài lên cho người chấm dễ đối chiếu, mình commit và push
+    thêm.
+
+❯ Hãy commit cả DESIGN_NOTES.md và AI_Engineering_Challenges/ .                 
+                                                                                
+  Push lại lên master và replace history                                        
+
+  Listed 1 directory (ctrl+o to expand)
+
+⏺ Thư mục chỉ có duy nhất file AI_Challenge_06.md mà mình đã đọc trước đó. Về
+  "replace history" thì có thể hiểu theo nhiều cách, mà force-push sẽ ghi đè
+  lịch sử trên GitHub nên mình sẽ hỏi lại cho chắc trước khi làm. · summarized
+
+⏺ User answered Claude's questions:
+  ⎿  · "Replace history" nghĩa là bạn muốn lịch sử commit trên master trông như 
+     thế nào? → Thêm 1 commit mới
+
+  Ran 1 shell command (ctrl+o to expand)
+
+⏺ Push bị từ chối vì nhánh cục bộ tên ai-challenge-06 còn trên GitHub là master,
+  khác tên nên git không tự push được — thông tin trước đó của mình về việc chỉ
+  cần git push là sai. Giờ mình sẽ push lại với tên nhánh ghi rõ. · summarized
+
+  Pushed to master (ctrl+o to expand)
+
+⏺ Mình đã commit DESIGN_NOTES.md và AI_Engineering_Challenges/ rồi push lên
+  master bằng một commit mới (3607177), đúng như bạn chọn. Lịch sử cũ giữ
+  nguyên, không có force-push. master trên GitHub giờ trỏ đúng commit mới nhất ở
+  máy, và không còn file nào chưa commit.
+
+  Mình cần sửa lại một điều đã nói lần trước: gõ git push không kèm tham số sẽ
+  không chạy được. Lý do là nhánh ở máy tên ai-challenge-06 còn nhánh trên
+  GitHub tên master, và git mặc định từ chối khi hai tên khác nhau. Lần này mình
+  phải push kèm tên nhánh:
+
+  git push origin HEAD:master
+
+  Nếu bạn muốn sau này chỉ cần gõ git push, mình có thể đổi tên nhánh ở máy
+  thành master bằng lệnh dưới đây. Mình chưa làm vì bạn chưa yêu cầu.
+
+  git branch -m master
+⏺ Remote Control not started here · another Claude Code on this machine 
+  (started 13h ago) already has Remote Control for this conversation, so
+  this terminal can't see your sessions on other machines and they 
+  can't reach it · run /remote-control to move it to this terminal

@@ -115,6 +115,22 @@ test/               37 tests (node:test)
 | Multiple expenses consuming the same limit | `calculator.test.js` — deductible across expenses, sub-benefit limit, shared limit group |
 | All 20 dataset expenses | `dataset.test.js` — exact match with the hand-computed output, invariants, summary |
 
+## How this was built
+
+Design first, then code. The order was: read the challenge → design the policy schema and the 20 expenses, computing every expected output by hand → write the spec → write a task-by-task implementation plan → build it test-first. The artifacts of each stage are in the repository:
+
+| Document | What it holds |
+|---|---|
+| [`AI_Engineering_Challenges/AI_Challenge_06.md`](AI_Engineering_Challenges/AI_Challenge_06.md) | The original challenge statement |
+| [`docs/superpowers/specs/2026-09-11-policy-benefits-calculator-design.md`](docs/superpowers/specs/2026-09-11-policy-benefits-calculator-design.md) | The spec: schema, the five processing steps, reason templates, output shape, dataset and expected results |
+| [`docs/superpowers/plans/2026-09-11-policy-benefits-calculator.md`](docs/superpowers/plans/2026-09-11-policy-benefits-calculator.md) | The implementation plan: 8 tasks, each with its failing test, its code and its commit |
+| [`docs/diagrams/engine-overview.md`](docs/diagrams/engine-overview.md) | Diagram: how the engine processes a batch of expenses |
+| [`docs/diagrams/expense-walkthrough.md`](docs/diagrams/expense-walkthrough.md) | Diagram: EXP-003 traced through all five steps with real numbers |
+| [`DESIGN_NOTES.md`](DESIGN_NOTES.md) | Working notes (in Vietnamese) kept while the rules were still being decided; superseded by the spec |
+| [`ai-conversations/ai-conversation.txt`](ai-conversations/ai-conversation.txt) | Transcript of the AI coding session that produced all of the above |
+
+The transcript is the terminal scrollback of the session, from the first reading of the challenge to the final push. The discussion is in Vietnamese; every produced artifact is in English. It shows the decisions being argued out — the order the rules are applied in, where `effective_date` belongs, how overlapping limits nest, whether the deductible is annual or per benefit, integer-satang money handling — then the dataset, the spec, the plan and the test-first build. User prompts are marked `❯` and replies `⏺`, with file writes shown as inline diffs. Long tool output appears collapsed (`… +N lines`, `Ran N shell commands`), so it records the reasoning trail rather than complete file contents.
+
 ## Assumptions
 
 1. Each expense is one visit. Visits are used by every non-denied expense, including `NO_PAYOUT`.
