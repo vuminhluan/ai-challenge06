@@ -1,0 +1,45 @@
+✔ normal coverage: no copay or deductible pays the full amount (11.00825ms)
+✔ percentage copay: partially covered (the example from the problem statement) (0.299834ms)
+✔ fixed copay larger than the bill leaves nothing to pay (NO_PAYOUT) (0.183542ms)
+✔ deductible is consumed across expenses before copay applies (0.362625ms)
+✔ per-visit cap applies before the deductible (0.391166ms)
+✔ waiting period denial consumes no deductible, visit or limit (0.232667ms)
+✔ exclusion denial consumes nothing (0.222292ms)
+✔ sub-benefit limit: partially covered when short, then denied when exhausted (0.253667ms)
+✔ a limit group is consumed by two different benefits (0.690083ms)
+✔ the policy annual limit binds even when the benefit still has room (0.277083ms)
+✔ visit limit: denied once used up, and denied expenses do not use visits (0.146333ms)
+✔ unknown benefit or sub-benefit and out-of-period dates are denied, not errors (0.068583ms)
+✔ processes chronologically regardless of input order; same-day ties go by ID (0.316542ms)
+✔ does not mutate its inputs and gives the same answer twice (0.424875ms)
+✔ handles satang amounts without rounding drift (0.19175ms)
+✔ the 20 dataset expenses match the hand-computed expected output (0.609ms)
+✔ every result satisfies the money invariants (0.090084ms)
+✔ the end-of-year summary matches the hand-computed summary (0.088084ms)
+✔ adds calendar days across month ends and leap years (1.515291ms)
+✔ denies expenses outside the policy period (0.368458ms)
+✔ denies benefits and sub-benefits the policy does not have (0.103334ms)
+✔ matches exclusion keywords case-insensitively (0.11475ms)
+✔ waiting period: denied the day before coverage starts, allowed on the day (0.078542ms)
+✔ a sub-benefit waiting period overrides the benefit one (0.0795ms)
+✔ denies once the visit limit is used up (0.089333ms)
+✔ denies when a limit tier is exhausted, naming the most specific one (0.063375ms)
+✔ reports the first failed check when several fail (0.123584ms)
+✔ lists only tiers that have a limit, most specific first (0.708875ms)
+✔ record consumes every tier, the deductible and one visit (0.142291ms)
+✔ converts THB to satang and back without floating-point drift (0.332125ms)
+✔ rounds a percentage copay half-up to the nearest satang (0.062708ms)
+✔ formats amounts for reasons (9.217959ms)
+✔ accepts a well-formed policy and expenses (2.10475ms)
+✔ rejects a malformed policy, listing every problem (0.544792ms)
+✔ rejects malformed expenses, listing every problem (0.107416ms)
+✔ resolves coverage with inherited and overridden rules (0.177459ms)
+✔ summary reports own remaining balance and what is actually still available (10.632084ms)
+ℹ tests 37
+ℹ suites 0
+ℹ pass 37
+ℹ fail 0
+ℹ cancelled 0
+ℹ skipped 0
+ℹ todo 0
+ℹ duration_ms 58.270791
