@@ -1,0 +1,66 @@
+{
+  "policy_id": "POL-2024-001",
+  "member_name": "Somchai Jaidee",
+  "currency": "THB",
+  "effective_date": "2024-01-01",
+  "expiry_date": "2024-12-31",
+  "annual_limit": 100000,
+  "limit_groups": [
+    { "group_id": "DENTAL_OPTICAL", "name": "Dental & Optical combined", "annual_limit": 12000 }
+  ],
+  "benefits": [
+    {
+      "benefit_type": "OUTPATIENT",
+      "annual_limit": 20000,
+      "deductible": 1000,
+      "copay": { "type": "PERCENTAGE", "value": 20 },
+      "waiting_period_days": 30,
+      "sub_benefits": [
+        { "name": "Doctor Visit", "per_visit_cap": 1500, "max_visits": 30 },
+        { "name": "Physiotherapy", "per_visit_cap": 1500, "max_visits": 10, "annual_limit": 2000 },
+        { "name": "Lab Test", "per_visit_cap": 3000 }
+      ]
+    },
+    {
+      "benefit_type": "INPATIENT",
+      "annual_limit": 90000,
+      "deductible": 0,
+      "copay": { "type": "PERCENTAGE", "value": 0 },
+      "waiting_period_days": 30,
+      "sub_benefits": [
+        { "name": "Hospital Stay", "per_visit_cap": 30000 },
+        { "name": "Surgery", "per_visit_cap": 50000 }
+      ]
+    },
+    {
+      "benefit_type": "DENTAL",
+      "limit_group": "DENTAL_OPTICAL",
+      "annual_limit": 10000,
+      "deductible": 500,
+      "copay": { "type": "FIXED", "value": 300 },
+      "waiting_period_days": 90,
+      "sub_benefits": [
+        { "name": "Cleaning", "max_visits": 2 },
+        { "name": "Filling", "per_visit_cap": 3000 },
+        { "name": "Root Canal", "per_visit_cap": 8000, "waiting_period_days": 180 }
+      ]
+    },
+    {
+      "benefit_type": "OPTICAL",
+      "limit_group": "DENTAL_OPTICAL",
+      "annual_limit": 8000,
+      "deductible": 0,
+      "copay": { "type": "PERCENTAGE", "value": 10 },
+      "waiting_period_days": 60,
+      "sub_benefits": [
+        { "name": "Eye Exam", "max_visits": 1 },
+        { "name": "Glasses", "per_visit_cap": 5000, "max_visits": 1 }
+      ]
+    }
+  ],
+  "exclusions": [
+    { "exclusion_id": "EXC-01", "description": "Cosmetic procedures", "keywords": ["cosmetic", "whitening", "botox", "aesthetic"] },
+    { "exclusion_id": "EXC-02", "description": "Self-inflicted injury", "keywords": ["self-inflicted"] },
+    { "exclusion_id": "EXC-03", "description": "Experimental treatment", "keywords": ["experimental"] }
+  ]
+}

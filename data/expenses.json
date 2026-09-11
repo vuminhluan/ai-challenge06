@@ -1,0 +1,22 @@
+[
+  { "expense_id": "EXP-001", "date": "2024-01-10", "benefit_type": "OUTPATIENT", "sub_benefit": "Doctor Visit", "amount": 1200, "diagnosis": "Acute bronchitis", "provider": "Bangkok Hospital" },
+  { "expense_id": "EXP-002", "date": "2024-01-31", "benefit_type": "OUTPATIENT", "sub_benefit": "Doctor Visit", "amount": 800, "diagnosis": "Common cold", "provider": "Sukhumvit Family Clinic" },
+  { "expense_id": "EXP-003", "date": "2024-02-12", "benefit_type": "OUTPATIENT", "sub_benefit": "Doctor Visit", "amount": 2500, "diagnosis": "Acute bronchitis", "provider": "Bangkok Hospital" },
+  { "expense_id": "EXP-004", "date": "2024-02-20", "benefit_type": "INPATIENT", "sub_benefit": "Hospital Stay", "amount": 18500, "diagnosis": "Dengue fever", "provider": "Samitivej Hospital" },
+  { "expense_id": "EXP-005", "date": "2024-03-05", "benefit_type": "OUTPATIENT", "sub_benefit": "Physiotherapy", "amount": 1500, "diagnosis": "Lower back pain", "provider": "Bangkok Physio Center" },
+  { "expense_id": "EXP-006", "date": "2024-03-19", "benefit_type": "OUTPATIENT", "sub_benefit": "Physiotherapy", "amount": 1500, "diagnosis": "Lower back pain", "provider": "Bangkok Physio Center" },
+  { "expense_id": "EXP-007", "date": "2024-04-02", "benefit_type": "OUTPATIENT", "sub_benefit": "Physiotherapy", "amount": 1500, "diagnosis": "Lower back pain", "provider": "Bangkok Physio Center" },
+  { "expense_id": "EXP-008", "date": "2024-04-03", "benefit_type": "DENTAL", "sub_benefit": "Cleaning", "amount": 1200, "diagnosis": "Dental plaque", "provider": "Smile Dental Clinic" },
+  { "expense_id": "EXP-009", "date": "2024-04-18", "benefit_type": "DENTAL", "sub_benefit": "Filling", "amount": 4000, "diagnosis": "Dental caries", "provider": "Smile Dental Clinic" },
+  { "expense_id": "EXP-010", "date": "2024-05-06", "benefit_type": "DENTAL", "sub_benefit": "Cleaning", "amount": 250, "diagnosis": "Routine scaling", "provider": "Smile Dental Clinic" },
+  { "expense_id": "EXP-011", "date": "2024-05-10", "benefit_type": "DENTAL", "sub_benefit": "Root Canal", "amount": 7500, "diagnosis": "Pulpitis", "provider": "Smile Dental Clinic" },
+  { "expense_id": "EXP-012", "date": "2024-06-03", "benefit_type": "OUTPATIENT", "sub_benefit": "Acupuncture", "amount": 1500, "diagnosis": "Neck pain", "provider": "Chinese Medicine Clinic" },
+  { "expense_id": "EXP-013", "date": "2024-06-20", "benefit_type": "INPATIENT", "sub_benefit": "Surgery", "amount": 45000, "diagnosis": "Cosmetic rhinoplasty", "provider": "Bumrungrad International Hospital" },
+  { "expense_id": "EXP-014", "date": "2024-07-08", "benefit_type": "DENTAL", "sub_benefit": "Cleaning", "amount": 900, "diagnosis": "Dental plaque", "provider": "Smile Dental Clinic" },
+  { "expense_id": "EXP-015", "date": "2024-07-15", "benefit_type": "DENTAL", "sub_benefit": "Root Canal", "amount": 7500, "diagnosis": "Pulpitis", "provider": "Smile Dental Clinic" },
+  { "expense_id": "EXP-016", "date": "2024-08-05", "benefit_type": "OPTICAL", "sub_benefit": "Glasses", "amount": 4000, "diagnosis": "Myopia", "provider": "Siam Optical" },
+  { "expense_id": "EXP-017", "date": "2024-08-05", "benefit_type": "OPTICAL", "sub_benefit": "Eye Exam", "amount": 800, "diagnosis": "Myopia", "provider": "Siam Optical" },
+  { "expense_id": "EXP-018", "date": "2024-09-10", "benefit_type": "INPATIENT", "sub_benefit": "Surgery", "amount": 60000, "diagnosis": "Acute appendicitis", "provider": "Bangkok Hospital" },
+  { "expense_id": "EXP-019", "date": "2024-11-20", "benefit_type": "INPATIENT", "sub_benefit": "Hospital Stay", "amount": 25000, "diagnosis": "Pneumonia", "provider": "Samitivej Hospital" },
+  { "expense_id": "EXP-020", "date": "2024-12-16", "benefit_type": "OUTPATIENT", "sub_benefit": "Doctor Visit", "amount": 1000, "diagnosis": "Influenza", "provider": "Sukhumvit Family Clinic" }
+]

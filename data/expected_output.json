@@ -1,0 +1,172 @@
+{
+  "results": [
+    {
+      "expense_id": "EXP-001", "submitted_amount": 1200, "not_covered_amount": 1200, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 1200, "decision": "DENIED",
+      "reason": "Denied: OUTPATIENT waiting period of 30 days not met; coverage starts 2024-01-31.",
+      "remaining_annual_limit": 100000, "remaining_visit_limit": 30
+    },
+    {
+      "expense_id": "EXP-002", "submitted_amount": 800, "not_covered_amount": 0, "deductible_applied": 800, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 800, "decision": "NO_PAYOUT",
+      "reason": "800 THB applied to OUTPATIENT deductible (200 THB remaining). Covered: 0 THB. Member pays: 800 THB.",
+      "remaining_annual_limit": 100000, "remaining_visit_limit": 29
+    },
+    {
+      "expense_id": "EXP-003", "submitted_amount": 2500, "not_covered_amount": 1000, "deductible_applied": 200, "copay_amount": 260,
+      "covered_amount": 1040, "member_pays": 1460, "decision": "PARTIALLY_COVERED",
+      "reason": "Per-visit cap of 1,500 THB for Doctor Visit applied; 1,000 THB not covered. 200 THB applied to OUTPATIENT deductible (0 THB remaining). 20% copay applied: 260 THB. Covered: 1,040 THB. Member pays: 1,460 THB.",
+      "remaining_annual_limit": 98960, "remaining_visit_limit": 28
+    },
+    {
+      "expense_id": "EXP-004", "submitted_amount": 18500, "not_covered_amount": 0, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 18500, "member_pays": 0, "decision": "COVERED",
+      "reason": "Fully covered: 18,500 THB.",
+      "remaining_annual_limit": 80460, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-005", "submitted_amount": 1500, "not_covered_amount": 0, "deductible_applied": 0, "copay_amount": 300,
+      "covered_amount": 1200, "member_pays": 300, "decision": "PARTIALLY_COVERED",
+      "reason": "20% copay applied: 300 THB. Covered: 1,200 THB. Member pays: 300 THB.",
+      "remaining_annual_limit": 79260, "remaining_visit_limit": 9
+    },
+    {
+      "expense_id": "EXP-006", "submitted_amount": 1500, "not_covered_amount": 400, "deductible_applied": 0, "copay_amount": 300,
+      "covered_amount": 800, "member_pays": 700, "decision": "PARTIALLY_COVERED",
+      "reason": "20% copay applied: 300 THB. Physiotherapy annual limit had only 800 THB remaining; 400 THB not covered. Covered: 800 THB. Member pays: 700 THB.",
+      "remaining_annual_limit": 78460, "remaining_visit_limit": 8
+    },
+    {
+      "expense_id": "EXP-007", "submitted_amount": 1500, "not_covered_amount": 1500, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 1500, "decision": "DENIED",
+      "reason": "Denied: Physiotherapy annual limit exhausted.",
+      "remaining_annual_limit": 78460, "remaining_visit_limit": 8
+    },
+    {
+      "expense_id": "EXP-008", "submitted_amount": 1200, "not_covered_amount": 0, "deductible_applied": 500, "copay_amount": 300,
+      "covered_amount": 400, "member_pays": 800, "decision": "PARTIALLY_COVERED",
+      "reason": "500 THB applied to DENTAL deductible (0 THB remaining). Fixed copay applied: 300 THB. Covered: 400 THB. Member pays: 800 THB.",
+      "remaining_annual_limit": 78060, "remaining_visit_limit": 1
+    },
+    {
+      "expense_id": "EXP-009", "submitted_amount": 4000, "not_covered_amount": 1000, "deductible_applied": 0, "copay_amount": 300,
+      "covered_amount": 2700, "member_pays": 1300, "decision": "PARTIALLY_COVERED",
+      "reason": "Per-visit cap of 3,000 THB for Filling applied; 1,000 THB not covered. Fixed copay applied: 300 THB. Covered: 2,700 THB. Member pays: 1,300 THB.",
+      "remaining_annual_limit": 75360, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-010", "submitted_amount": 250, "not_covered_amount": 0, "deductible_applied": 0, "copay_amount": 250,
+      "covered_amount": 0, "member_pays": 250, "decision": "NO_PAYOUT",
+      "reason": "Fixed copay of 300 THB limited to the remaining 250 THB. Covered: 0 THB. Member pays: 250 THB.",
+      "remaining_annual_limit": 75360, "remaining_visit_limit": 0
+    },
+    {
+      "expense_id": "EXP-011", "submitted_amount": 7500, "not_covered_amount": 7500, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 7500, "decision": "DENIED",
+      "reason": "Denied: Root Canal waiting period of 180 days not met; coverage starts 2024-06-29.",
+      "remaining_annual_limit": 75360, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-012", "submitted_amount": 1500, "not_covered_amount": 1500, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 1500, "decision": "DENIED",
+      "reason": "Denied: Acupuncture is not covered under OUTPATIENT.",
+      "remaining_annual_limit": 75360, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-013", "submitted_amount": 45000, "not_covered_amount": 45000, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 45000, "decision": "DENIED",
+      "reason": "Denied: excluded under EXC-01 (Cosmetic procedures); diagnosis \"Cosmetic rhinoplasty\" matches \"cosmetic\".",
+      "remaining_annual_limit": 75360, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-014", "submitted_amount": 900, "not_covered_amount": 900, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 900, "decision": "DENIED",
+      "reason": "Denied: Cleaning visit limit reached (2 of 2 visits used).",
+      "remaining_annual_limit": 75360, "remaining_visit_limit": 0
+    },
+    {
+      "expense_id": "EXP-015", "submitted_amount": 7500, "not_covered_amount": 300, "deductible_applied": 0, "copay_amount": 300,
+      "covered_amount": 6900, "member_pays": 600, "decision": "PARTIALLY_COVERED",
+      "reason": "Fixed copay applied: 300 THB. DENTAL annual limit had only 6,900 THB remaining; 300 THB not covered. Covered: 6,900 THB. Member pays: 600 THB.",
+      "remaining_annual_limit": 68460, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-016", "submitted_amount": 4000, "not_covered_amount": 1600, "deductible_applied": 0, "copay_amount": 400,
+      "covered_amount": 2000, "member_pays": 2000, "decision": "PARTIALLY_COVERED",
+      "reason": "10% copay applied: 400 THB. Dental & Optical combined annual limit had only 2,000 THB remaining; 1,600 THB not covered. Covered: 2,000 THB. Member pays: 2,000 THB.",
+      "remaining_annual_limit": 66460, "remaining_visit_limit": 0
+    },
+    {
+      "expense_id": "EXP-017", "submitted_amount": 800, "not_covered_amount": 800, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 800, "decision": "DENIED",
+      "reason": "Denied: Dental & Optical combined annual limit exhausted.",
+      "remaining_annual_limit": 66460, "remaining_visit_limit": 1
+    },
+    {
+      "expense_id": "EXP-018", "submitted_amount": 60000, "not_covered_amount": 10000, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 50000, "member_pays": 10000, "decision": "PARTIALLY_COVERED",
+      "reason": "Per-visit cap of 50,000 THB for Surgery applied; 10,000 THB not covered. Covered: 50,000 THB. Member pays: 10,000 THB.",
+      "remaining_annual_limit": 16460, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-019", "submitted_amount": 25000, "not_covered_amount": 8540, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 16460, "member_pays": 8540, "decision": "PARTIALLY_COVERED",
+      "reason": "Policy annual limit had only 16,460 THB remaining; 8,540 THB not covered. Covered: 16,460 THB. Member pays: 8,540 THB.",
+      "remaining_annual_limit": 0, "remaining_visit_limit": null
+    },
+    {
+      "expense_id": "EXP-020", "submitted_amount": 1000, "not_covered_amount": 1000, "deductible_applied": 0, "copay_amount": 0,
+      "covered_amount": 0, "member_pays": 1000, "decision": "DENIED",
+      "reason": "Denied: Policy annual limit exhausted.",
+      "remaining_annual_limit": 0, "remaining_visit_limit": 28
+    }
+  ],
+  "summary": {
+    "policy": { "annual_limit": 100000, "used": 100000, "remaining": 0 },
+    "limit_groups": [
+      { "group_id": "DENTAL_OPTICAL", "name": "Dental & Optical combined", "annual_limit": 12000, "used": 12000, "remaining": 0 }
+    ],
+    "benefits": [
+      {
+        "benefit_type": "OUTPATIENT", "annual_limit": 20000, "used": 3040, "remaining": 16960, "available": 0,
+        "deductible": { "amount": 1000, "used": 1000, "remaining": 0 },
+        "sub_benefits": [
+          { "name": "Doctor Visit", "annual_limit": null, "used": 1040, "remaining": null, "available": 0, "max_visits": 30, "visits_used": 2, "visits_remaining": 28 },
+          { "name": "Physiotherapy", "annual_limit": 2000, "used": 2000, "remaining": 0, "available": 0, "max_visits": 10, "visits_used": 2, "visits_remaining": 8 },
+          { "name": "Lab Test", "annual_limit": null, "used": 0, "remaining": null, "available": 0, "max_visits": null, "visits_used": 0, "visits_remaining": null }
+        ]
+      },
+      {
+        "benefit_type": "INPATIENT", "annual_limit": 90000, "used": 84960, "remaining": 5040, "available": 0,
+        "deductible": { "amount": 0, "used": 0, "remaining": 0 },
+        "sub_benefits": [
+          { "name": "Hospital Stay", "annual_limit": null, "used": 34960, "remaining": null, "available": 0, "max_visits": null, "visits_used": 2, "visits_remaining": null },
+          { "name": "Surgery", "annual_limit": null, "used": 50000, "remaining": null, "available": 0, "max_visits": null, "visits_used": 1, "visits_remaining": null }
+        ]
+      },
+      {
+        "benefit_type": "DENTAL", "annual_limit": 10000, "used": 10000, "remaining": 0, "available": 0,
+        "deductible": { "amount": 500, "used": 500, "remaining": 0 },
+        "sub_benefits": [
+          { "name": "Cleaning", "annual_limit": null, "used": 400, "remaining": null, "available": 0, "max_visits": 2, "visits_used": 2, "visits_remaining": 0 },
+          { "name": "Filling", "annual_limit": null, "used": 2700, "remaining": null, "available": 0, "max_visits": null, "visits_used": 1, "visits_remaining": null },
+          { "name": "Root Canal", "annual_limit": null, "used": 6900, "remaining": null, "available": 0, "max_visits": null, "visits_used": 1, "visits_remaining": null }
+        ]
+      },
+      {
+        "benefit_type": "OPTICAL", "annual_limit": 8000, "used": 2000, "remaining": 6000, "available": 0,
+        "deductible": { "amount": 0, "used": 0, "remaining": 0 },
+        "sub_benefits": [
+          { "name": "Eye Exam", "annual_limit": null, "used": 0, "remaining": null, "available": 0, "max_visits": 1, "visits_used": 0, "visits_remaining": 1 },
+          { "name": "Glasses", "annual_limit": null, "used": 2000, "remaining": null, "available": 0, "max_visits": 1, "visits_used": 1, "visits_remaining": 0 }
+        ]
+      }
+    ],
+    "totals": {
+      "submitted": 186150,
+      "covered": 100000,
+      "member_pays": 86150,
+      "by_decision": { "COVERED": 1, "PARTIALLY_COVERED": 9, "NO_PAYOUT": 2, "DENIED": 8 }
+    }
+  }
+}
