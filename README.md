@@ -142,12 +142,11 @@ The transcript is the terminal scrollback of the session, from the first reading
 
 ## Timeline
 
-| Work | Estimate |
+| Stage | Time |
 |---|---|
-| Analysis and design (spec, policy, 20 expenses computed by hand) | Done before coding |
-| Setup, money, policy validation, ledger | 0.5 h |
-| Eligibility, calculator, reasons, summary | 1 h |
-| Dataset files and expected output | 0.5 h |
-| Tests and fixes | 1 h |
-| CLI, README, test results | 0.5 h |
-| **Implementation total** | **~3.5 h** |
+| **Analysis and design** — reading the challenge, deciding the rules and their order, designing the policy schema, and building the 20-expense dataset with every expected result computed by hand | 2 h |
+| **Implementation** — the AI-assisted build itself: modules, CLI and unit tests | 1 h |
+| **End-to-end testing and documentation** — running the full dataset against the hand-computed results, then the README, spec and diagrams | 0.5 h |
+| **Total** | **3.5 h** |
+
+Most of the time went into design rather than code. Deciding the order the rules apply in, and computing all 20 expected results by hand before writing any code, is what made the implementation short and gave the tests something independent to check against.
